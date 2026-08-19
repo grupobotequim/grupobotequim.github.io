@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pesquisa Botequim — Música ou Jogo?</title>
+<link rel="icon" href="../logo.png">
+<style>
+  :root{
+    --bg:#0f0d0b; --card:#1b1714; --linha:#2e2620;
+    --amarelo:#f5b301; --texto:#f7f1e6; --suave:#b9ad9c;
+    --verde:#3fb950;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    margin:0;min-height:100dvh;background:var(--bg);color:var(--texto);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    display:flex;flex-direction:column;align-items:center;padding:24px 16px 40px;
+  }
+  .logo{width:88px;height:auto;margin-bottom:14px;opacity:.95}
+  h1{font-size:26px;line-height:1.25;text-align:center;margin:0 0 6px;font-weight:800}
+  .sub{color:var(--suave);text-align:center;font-size:15px;margin:0 0 22px;max-width:420px}
+  .wrap{width:100%;max-width:460px}
+  .campo{margin-bottom:18px}
+  label{display:block;font-size:13px;color:var(--suave);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em}
+  select{
+    width:100%;padding:14px;border-radius:12px;border:1px solid var(--linha);
+    background:var(--card);color:var(--texto);font-size:16px;appearance:none;
+  }
+  .opcao{
+    width:100%;display:flex;align-items:center;gap:14px;padding:20px 18px;margin-bottom:14px;
+    background:var(--card);border:2px solid var(--linha);border-radius:16px;color:var(--texto);
+    font-size:19px;font-weight:700;text-align:left;cursor:pointer;transition:.15s;
+  }
+  .opcao:active{transform:scale(.98)}
+  .opcao .emoji{font-size:30px;line-height:1}
+  .opcao small{display:block;font-size:13px;font-weight:400;color:var(--suave);margin-top:3px}
+  .opcao[data-sel="1"]{border-color:var(--amarelo);background:#241d13}
+  .enviar{
+    width:100%;padding:18px;border:0;border-radius:16px;background:var(--amarelo);
+    color:#191308;font-size:18px;font-weight:800;cursor:pointer;margin-top:6px;
+  }
+  .enviar:disabled{opacity:.4;cursor:not-allowed}
+  .obrigado{text-align:center;padding-top:10px}
+  .obrigado h2{font-size:24px;margin:0 0 6px}
+  .barra{background:var(--card);border-radius:12px;overflow:hidden;height:34px;margin:8px 0 4px;border:1px solid var(--linha)}
+  .barra span{display:block;height:100%;background:var(--amarelo)}
+  .linha-res{display:flex;justify-content:space-between;font-size:15px;margin-top:12px}
+  .total{color:var(--suave);font-size:13px;text-align:center;margin-top:18px}
+  .erro{color:#ff8f8f;font-size:14px;text-align:center;margin-top:12px;min-height:20px}
+  .rodape{color:#6f6558;font-size:12px;text-align:center;margin-top:26px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+  <img class="logo" src="../logo.png" alt="Botequim">
+
+  <div class="wrap">
+    <!-- VOTAÇÃO -->
+    <section id="tela-voto">
+      <h1>O que você prefere aqui no Botequim?</h1>
+      <p class="sub">Uma pergunta só, leva 5 segundos. Sua resposta ajuda a gente a acertar o clima da casa.</p>
+
+      <div class="campo" id="campo-casa">
+        <label for="casa">Em qual casa você está?</label>
+        <select id="casa">
+          <option value="">Escolha a casa…</option>
+          <option value="jardim">Botequim Jardim — Santo André</option>
+          <option value="sao_caetano">Botequim São Caetano</option>
+          <option value="sao_bernardo">Botequim São Bernardo</option>
+          <option value="washington_luis">Botequim Washington Luís</option>
+        </select>
+      </div>
+
+      <button class="opcao" data-voto="musica">
+        <span class="emoji">🎵</span>
+        <span>Música
+          <small>Som ambiente / música ao vivo tocando</small>
+        </span>
+      </button>
+
+      <button class="opcao" data-voto="jogo">
+        <span class="emoji">⚽</span>
+        <span>Som do jogo
+          <small>Narração do jogo na TV, no volume</small>
+        </span>
+      </button>
+
+      <button class="opcao" data-voto="depende">
+        <span class="emoji">🤝</span>
+        <span>Depende do dia
+          <small>Jogo quando tem, música quando não tem</small>
+        </span>
+      </button>
+
+      <button class="enviar" id="btn-enviar" disabled>Enviar minha resposta</button>
+      <div class="erro" id="erro"></div>
+    </section>
+
+    <!-- OBRIGADO + RESULTADO -->
+    <section id="tela-fim" class="hidden">
+      <div class="obrigado">
+        <h2>Valeu! 🍻</h2>
+        <p class="sub">Resposta registrada. Olha como está a preferença da galera:</p>
+      </div>
+      <div id="resultado"></div>
+      <div class="total" id="total"></div>
+    </section>
+
+    <p class="rodape">Grupo Botequim · pesquisa anônima</p>
+  </div>
+
+<script>
+const SB_URL = 'https://kuyhkltbwlkvtgbabscv.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt1eWhrbHRid2xrdnRnYmFic2N2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3OTQxNDgsImV4cCI6MjA5NDM3MDE0OH0.CWGYjRYO4-Gl0NfJPVKG5zxwYBuI1mzglUK9EjzoWCU';
+const TABELA = 'pesquisa_musica_jogo';
+
+const ROTULOS = { musica:'🎵 Música', jogo:'⚽ Som do jogo', depende:'🤝 Depende do dia' };
+
+const params   = new URLSearchParams(location.search);
+const casaURL  = (params.get('casa') || '').toLowerCase();
+const selCasa  = document.getElementById('casa');
+const btnEnv   = document.getElementById('btn-enviar');
+const elErro   = document.getElementById('erro');
+let voto = null;
+
+// casa vinda do QR code (?casa=jardim) já entra escolhida e some o seletor
+if (casaURL && [...selCasa.options].some(o => o.value === casaURL)) {
+  selCasa.value = casaURL;
+  document.getElementById('campo-casa').classList.add('hidden');
+}
+
+document.querySelectorAll('.opcao').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.opcao').forEach(b => b.dataset.sel = '0');
+    btn.dataset.sel = '1';
+    voto = btn.dataset.voto;
+    checar();
+  });
+});
+selCasa.addEventListener('change', checar);
+
+function checar(){ btnEnv.disabled = !(voto && selCasa.value); }
+
+btnEnv.addEventListener('click', async () => {
+  btnEnv.disabled = true;
+  btnEnv.textContent = 'Enviando…';
+  elErro.textContent = '';
+  try {
+    const r = await fetch(SB_URL + '/rest/v1/' + TABELA, {
+      method: 'POST',
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ casa: selCasa.value, voto: voto })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()));
+    localStorage.setItem('btq_pesquisa_musica_jogo', voto);
+    mostrarResultado();
+  } catch (e) {
+    elErro.textContent = 'Não deu pra enviar agora. Tenta de novo em alguns segundos.';
+    btnEnv.disabled = false;
+    btnEnv.textContent = 'Enviar minha resposta';
+    console.error(e);
+  }
+});
+
+async function contar(filtro){
+  const url = SB_URL + '/rest/v1/' + TABELA + '?select=id' + (filtro ? '&voto=eq.' + filtro : '');
+  const r = await fetch(url, {
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Prefer': 'count=exact', 'Range': '0-0' }
+  });
+  const cr = r.headers.get('content-range') || '*/0';
+  return parseInt(cr.split('/')[1], 10) || 0;
+}
+
+async function mostrarResultado(){
+  document.getElementById('tela-voto').classList.add('hidden');
+  document.getElementById('tela-fim').classList.remove('hidden');
+  const alvo = document.getElementById('resultado');
+  alvo.innerHTML = '<p class="total">carregando…</p>';
+  try {
+    const chaves = Object.keys(ROTULOS);
+    const nums = await Promise.all(chaves.map(k => contar(k)));
+    const total = nums.reduce((a,b) => a+b, 0) || 1;
+    alvo.innerHTML = chaves.map((k,i) => {
+      const pct = Math.round(nums[i] * 100 / total);
+      return '<div class="linha-res"><strong>' + ROTULOS[k] + '</strong><span>' + pct + '% · ' + nums[i] + '</span></div>' +
+             '<div class="barra"><span style="width:' + pct + '%"></span></div>';
+    }).join('');
+    document.getElementById('total').textContent = nums.reduce((a,b)=>a+b,0) + ' respostas até agora';
+  } catch(e){
+    alvo.innerHTML = '<p class="total">Resposta registrada. (parcial indisponível agora)</p>';
+    console.error(e);
+  }
+}
+
+// quem já votou neste celular vê direto o resultado
+if (localStorage.getItem('btq_pesquisa_musica_jogo')) mostrarResultado();
+</script>
+</body>
+</html>
