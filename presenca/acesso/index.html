@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#050a14">
+<meta name="robots" content="noindex, nofollow">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="../icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../icone-192.png">
+<title>Acesso Botequim</title>
+<!-- 🛂 22/10/2026 Acesso facial do Grupo Botequim — controle de PRESENÇA/ACESSO (não é o ponto oficial,
+     esse continua no relógio Control iD). O rosto é lido NESTE aparelho (face-api, sem instalar app):
+     daqui só sai o "molde" (128 números) + a selfie de prova pra Edge Function "presenca", que compara
+     no servidor e grava com a hora do servidor. Nenhum molde nem foto de cadastro desce pro celular. -->
+<style>
+  :root { --bg:#050a14; --card:#0f1a2e; --borda:#22314f; --tx:#f1f5f9; --sub:#94a3b8; --ok:#22c55e; --sai:#f97316; --ac:#facc15; --erro:#ef4444; --azul:#38bdf8; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--tx); font-family: system-ui, -apple-system, Roboto, "Segoe UI", sans-serif; overscroll-behavior:none; user-select:none; -webkit-user-select:none; overflow:hidden; }
+  #palco { position:fixed; inset:0; background:#000; }
+  #video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+  #moldura { position:absolute; left:50%; top:45%; width:min(66vw, 46vh); aspect-ratio:3/4; transform:translate(-50%,-50%); border:5px solid #ffffff55; border-radius:50%; pointer-events:none; transition:border-color .2s, box-shadow .2s; }
+  #moldura.viu { border-color:var(--azul); box-shadow:0 0 0 9999px #00000055, 0 0 40px #38bdf888; }
+  #moldura.ok { border-color:var(--ok); box-shadow:0 0 0 9999px #00000055, 0 0 50px #22c55eaa; }
+  #moldura.ruim { border-color:var(--erro); }
+  header { position:fixed; left:0; right:0; top:0; display:flex; align-items:center; justify-content:space-between; padding:calc(10px + env(safe-area-inset-top)) 16px 26px; background:linear-gradient(#000c, #0000); z-index:5; gap:10px; }
+  header .casa { font-size:1.15rem; font-weight:800; line-height:1.15; }
+  header .casa small { display:block; font-size:.78rem; color:var(--sub); font-weight:600; }
+  header .relogio { font-size:2.3rem; font-weight:900; font-variant-numeric:tabular-nums; color:var(--ac); text-shadow:0 2px 12px #000; }
+  #engrenagem { position:fixed; right:10px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:6; width:46px; height:46px; border-radius:50%; background:#0008; border:1px solid #fff3; color:#fff9; font-size:1.3rem; display:flex; align-items:center; justify-content:center; }
+  #status { position:fixed; left:0; right:0; bottom:0; padding:30px 16px calc(22px + env(safe-area-inset-bottom)); text-align:center; background:linear-gradient(#0000, #000d); z-index:4; }
+  #status .t { font-size:1.6rem; font-weight:800; text-shadow:0 2px 10px #000; }
+  #status .s { font-size:1rem; color:#cbd5e1; margin-top:4px; }
+  #status .rod { font-size:.72rem; color:#94a3b8aa; margin-top:10px; }
+  /* cartão do resultado */
+  #res { position:fixed; inset:0; z-index:8; display:none; align-items:center; justify-content:center; padding:20px; background:#000a; }
+  #res.on { display:flex; animation:surge .18s ease-out; }
+  @keyframes surge { from { opacity:0; transform:scale(.96); } to { opacity:1; transform:none; } }
+  #res .cart { width:100%; max-width:520px; border-radius:28px; padding:28px 22px 30px; text-align:center; background:var(--card); border:4px solid var(--ok); box-shadow:0 20px 80px #000; }
+  #res.saida .cart { border-color:var(--sai); } #res.erro .cart { border-color:var(--erro); } #res.rep .cart { border-color:var(--azul); }
+  #res .ic { font-size:4.6rem; line-height:1; }
+  #res .acao { font-size:1.5rem; font-weight:900; letter-spacing:.04em; margin-top:10px; color:var(--ok); text-transform:uppercase; }
+  #res.saida .acao { color:var(--sai); } #res.erro .acao { color:var(--erro); } #res.rep .acao { color:var(--azul); }
+  #res .nome { font-size:2.4rem; font-weight:900; margin:8px 0 2px; line-height:1.1; word-break:break-word; }
+  #res .hora { font-size:3.6rem; font-weight:900; font-variant-numeric:tabular-nums; }
+  #res .msg { font-size:1.15rem; color:var(--sub); margin-top:6px; }
+  /* telas cheias (config, carregando, cadastro) */
+  .tela { position:fixed; inset:0; z-index:9; display:none; flex-direction:column; padding:calc(16px + env(safe-area-inset-top)) 18px calc(16px + env(safe-area-inset-bottom)); background:var(--bg); overflow-y:auto; }
+  .tela.on { display:flex; }
+  .tela.transp { background:transparent; pointer-events:none; }
+  .tela.transp > * { pointer-events:auto; }
+  .centro { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:10px; }
+  .grande-ic { font-size:5rem; }
+  h1 { font-size:1.7rem; margin:6px 0; text-align:center; }
+  .sub { color:var(--sub); text-align:center; font-size:1.05rem; margin:0 0 8px; }
+  .barra { width:80%; max-width:360px; height:12px; border-radius:99px; background:var(--card); overflow:hidden; border:1px solid var(--borda); }
+  .barra i { display:block; height:100%; width:0; background:linear-gradient(90deg, var(--azul), var(--ok)); transition:width .3s; }
+  button { border:2px solid var(--borda); border-radius:16px; background:var(--card); color:var(--tx); font:inherit; padding:14px; cursor:pointer; touch-action:manipulation; }
+  button:active { transform:scale(.97); filter:brightness(1.3); }
+  .btn-g { font-size:1.3rem; font-weight:800; padding:18px; width:100%; margin-top:10px; }
+  .verde { background:var(--ok); border-color:var(--ok); color:#04130a; }
+  .cinza { background:transparent; }
+  .digitos { display:flex; justify-content:center; gap:10px; margin:10px 0 14px; }
+  .digitos span { width:46px; height:60px; border-radius:12px; border:3px solid var(--borda); background:var(--card); font-size:2rem; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .digitos span.cheio { border-color:var(--ac); }
+  .teclado { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .teclado button { font-size:2rem; font-weight:700; padding:16px; }
+  .erro { color:var(--erro); text-align:center; font-weight:700; font-size:1.1rem; min-height:1.4em; margin:6px 0; }
+  .lista { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+  .lista button { text-align:left; font-size:1.2rem; font-weight:700; padding:14px 16px; display:flex; justify-content:space-between; gap:10px; }
+  .lista button i { font-style:normal; font-size:.85rem; color:var(--sub); font-weight:600; }
+  input.campo { width:100%; font-size:1.3rem; padding:14px 16px; border-radius:14px; border:2px solid var(--borda); background:var(--card); color:var(--tx); user-select:text; -webkit-user-select:text; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  .chips button { padding:10px 14px; font-weight:700; }
+  .chips button.sel { border-color:var(--ac); background:#facc1522; }
+  .rotulo { font-size:.9rem; color:var(--sub); font-weight:700; margin:14px 0 4px; }
+  #cad-foto-barra { position:fixed; left:0; right:0; bottom:0; z-index:10; padding:18px 16px calc(18px + env(safe-area-inset-bottom)); background:linear-gradient(#0000, #000e 40%); text-align:center; display:none; }
+  #cad-foto-barra.on { display:block; }
+  #cad-foto-barra .t { font-size:1.4rem; font-weight:800; }
+  #cad-foto-barra .s { color:#cbd5e1; margin:4px 0 8px; }
+  .linha { display:flex; gap:10px; } .linha > * { flex:1; }
+  #faixa-cad { position:fixed; top:calc(76px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:6; background:var(--ac); color:#1a1300; font-weight:800; padding:6px 14px; border-radius:99px; display:none; font-size:.9rem; }
+  #faixa-cad.on { display:block; }
+</style>
+</head>
+<body>
+<div id="palco"><video id="video" playsinline autoplay muted></video><div id="moldura"></div></div>
+<header>
+  <div class="casa" id="casa">🛂 Acesso<small>Grupo Botequim</small></div>
+  <div class="relogio" id="relogio">--:--</div>
+</header>
+<div id="faixa-cad">✍️ MODO CADASTRO</div>
+<div id="status"><div class="t" id="st-t">Iniciando…</div><div class="s" id="st-s"></div><div class="rod">Controle de acesso · não substitui o ponto do relógio</div></div>
+<button id="engrenagem" title="cadastrar rosto (gerente)">⚙️</button>
+
+<div id="res"><div class="cart"><div class="ic" id="r-ic">✅</div><div class="acao" id="r-acao">Entrada</div><div class="nome" id="r-nome"></div><div class="hora" id="r-hora"></div><div class="msg" id="r-msg"></div></div></div>
+
+<!-- sem configuração / erro fatal -->
+<section class="tela" id="t-config"><div class="centro"><div class="grande-ic" id="cfg-ic">🔒</div><h1 id="cfg-t">Aparelho não configurado</h1><p class="sub" id="cfg-s">Abra o link da casa enviado pelo escritório.</p><button class="btn-g cinza" id="cfg-b" style="display:none;max-width:420px">🔄 Tentar de novo</button></div></section>
+
+<!-- carregando o leitor de rosto -->
+<section class="tela" id="t-carrega"><div class="centro"><div class="grande-ic">🛂</div><h1>Preparando o leitor de rosto</h1><p class="sub" id="carrega-s">Na primeira vez demora um pouco (baixa ~7 MB). Depois abre rápido.</p><div class="barra"><i id="carrega-b"></i></div></div></section>
+
+<!-- PIN do gerente -->
+<section class="tela" id="t-pin">
+  <h1>🔐 PIN do gerente</h1><p class="sub">Para cadastrar o rosto de alguém</p>
+  <div class="digitos" id="digitos"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+  <div class="erro" id="pin-erro"></div>
+  <div class="teclado" id="teclado"></div>
+  <button class="btn-g cinza" id="pin-voltar">← Voltar ao acesso</button>
+</section>
+
+<!-- menu do cadastro -->
+<section class="tela" id="t-cad">
+  <h1>✍️ Cadastrar rosto</h1>
+  <p class="sub">Quem vai ser cadastrado?</p>
+  <button class="btn-g verde" id="cad-nova">➕ Pessoa NOVA (não está na lista)</button>
+  <div class="rotulo">Ou escolha quem já está no cadastro e ainda não tem rosto:</div>
+  <input class="campo" id="cad-busca" placeholder="🔍 procurar nome…" autocomplete="off" autocapitalize="words">
+  <div class="lista" id="cad-lista"><p class="sub">carregando…</p></div>
+  <button class="btn-g cinza" id="cad-sair">✖ Sair do modo cadastro</button>
+</section>
+
+<!-- pessoa nova -->
+<section class="tela" id="t-nova">
+  <h1>➕ Pessoa nova</h1>
+  <div class="rotulo">Nome completo</div>
+  <input class="campo" id="nova-nome" placeholder="Nome e sobrenome" autocomplete="off" autocapitalize="words">
+  <div class="rotulo">Tipo</div>
+  <div class="chips" id="nova-tipos"></div>
+  <div class="erro" id="nova-erro"></div>
+  <button class="btn-g verde" id="nova-ok">📸 Continuar — tirar a foto</button>
+  <button class="btn-g cinza" id="nova-voltar">← Voltar</button>
+</section>
+
+<!-- barra da foto do cadastro (por cima da câmera) -->
+<div id="cad-foto-barra">
+  <div class="t" id="cf-t">Foto de: …</div>
+  <div class="s" id="cf-s">Rosto de frente, dentro do círculo, com luz no rosto</div>
+  <div class="linha"><button class="btn-g cinza" id="cf-cancelar">✖ Cancelar</button><button class="btn-g verde" id="cf-foto">📸 Capturar</button></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+<script>
+(function () {
+  'use strict';
+  var FN = 'https://kuyhkltbwlkvtgbabscv.supabase.co/functions/v1/presenca';
+  var MODELOS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/';
+  var ESPERA_MESMA = 120000; // mesma pessoa: ignora por 2 min
+  var $ = function (id) { return document.getElementById(id); };
+  var qs = new URLSearchParams(location.search);
+  var CASA = qs.get('casa') || '', K = qs.get('k') || '';
+  try {
+    if (CASA && K) { localStorage.setItem('ci_casa', CASA); localStorage.setItem('ci_k', K); }
+    else { CASA = localStorage.getItem('ci_casa') || ''; K = localStorage.getItem('ci_k') || ''; }
+  } catch (e) {}
+
+  var E = { offset: 0, modo: 'reconhecer', ocupado: false, bons: [], ultimoRosto: 0, pausaAte: 0, vistos: {}, passe: null, passeAte: 0, alvo: null, rostos: 0, falhasRede: 0 };
+  window.__ACESSO = E; // pra teste
+
+  function hhmm(d) { return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }); }
+  setInterval(function () { $('relogio').textContent = hhmm(new Date(Date.now() + E.offset)); }, 1000);
+  function status(t, s) { $('st-t').textContent = t; $('st-s').textContent = s || ''; }
+  function tela(id) { document.querySelectorAll('.tela').forEach(function (t) { t.classList.toggle('on', t.id === id); }); }
+  function moldura(c) { $('moldura').className = c || ''; }
+  function semNet(e) { return /Failed to fetch|NetworkError|Load failed|network|aborted|timeout/i.test(String(e && e.message)) ? 'Sem internet — confira o Wi-Fi' : (e && e.message) || 'Erro'; }
+  function falha(ic, t, s, botao) { $('cfg-ic').textContent = ic; $('cfg-t').textContent = t; $('cfg-s').textContent = s || ''; $('cfg-b').style.display = botao ? '' : 'none'; tela('t-config'); }
+  $('cfg-b').onclick = function () { location.reload(); };
+
+  function post(corpo) {
+    corpo.casa = CASA; corpo.k = K;
+    var ctl = new AbortController(); var t = setTimeout(function () { ctl.abort(); }, 20000);
+    return fetch(FN, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo), signal: ctl.signal })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) { var er = new Error(j.erro || ('erro ' + r.status)); er.j = j; er.status = r.status; throw er; } return j; }); })
+      .finally(function () { clearTimeout(t); });
+  }
+  function config() {
+    return fetch(FN + '?acao=facial&casa=' + encodeURIComponent(CASA) + '&k=' + encodeURIComponent(K), { cache: 'no-store' })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.erro || ('erro ' + r.status)); return j; }); })
+      .then(function (j) {
+        if (j.agora) E.offset = new Date(j.agora).getTime() - Date.now();
+        E.rostos = j.rostos || 0;
+        $('casa').innerHTML = ''; $('casa').appendChild(document.createTextNode('🛂 ' + j.casa.nome));
+        var s = document.createElement('small'); s.textContent = 'Acesso · ' + E.rostos + ' rosto' + (E.rostos === 1 ? '' : 's') + ' cadastrado' + (E.rostos === 1 ? '' : 's'); $('casa').appendChild(s);
+        return j;
+      });
+  }
+
+  // ---------- leitor de rosto (face-api no aparelho) ----------
+  var OPC_RAPIDO, OPC_CAD;
+  function carregarModelos() {
+    tela('t-carrega');
+    var passos = 0, total = 3;
+    function feito() { passos++; $('carrega-b').style.width = Math.round(passos / total * 100) + '%'; }
+    var tf = faceapi.tf;
+    return (tf.setBackend('webgl').catch(function () { return false; })).then(function (ok) {
+      if (!ok || tf.getBackend() !== 'webgl') return tf.setBackend('cpu');
+    }).then(function () { return tf.ready(); }).then(function () {
+      $('carrega-s').textContent = 'Baixando o leitor de rosto (' + tf.getBackend() + ')…';
+      OPC_RAPIDO = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
+      OPC_CAD = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+      return Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODELOS).then(feito),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODELOS).then(feito),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODELOS).then(feito),
+      ]);
+    });
+  }
+
+  function abrirCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject(new Error('Este navegador não abre a câmera. Use o Chrome.'));
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false }).then(function (s) {
+      $('video').srcObject = s;
+      return new Promise(function (ok) { if ($('video').readyState >= 2) ok(); else $('video').onloadeddata = function () { ok(); }; });
+    });
+  }
+
+  // qualidade: rosto grande, de frente, com luz
+  var cv = document.createElement('canvas'), cx = cv.getContext('2d', { willReadFrequently: true });
+  function luz(box) {
+    var v = $('video'); cv.width = 32; cv.height = 32;
+    cx.drawImage(v, box.x, box.y, box.width, box.height, 0, 0, 32, 32);
+    var d = cx.getImageData(0, 0, 32, 32).data, s = 0;
+    for (var i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    return s / (d.length / 4);
+  }
+  function deFrente(lm) {
+    var p = lm.positions; // 36-41 olho esq, 42-47 olho dir, 30 ponta do nariz
+    var ex = 0, dx = 0; for (var i = 36; i < 42; i++) ex += p[i].x; for (i = 42; i < 48; i++) dx += p[i].x; ex /= 6; dx /= 6;
+    var r = (p[30].x - ex) / (dx - ex);
+    return r > 0.3 && r < 0.7;
+  }
+  function distancia(a, b) { var s = 0; for (var i = 0; i < 128; i++) { var d = a[i] - b[i]; s += d * d; } return Math.sqrt(s); }
+  function media(ds) { var m = new Array(128).fill(0); ds.forEach(function (d) { for (var i = 0; i < 128; i++) m[i] += d[i] / ds.length; }); return m; }
+  function selfie(box, quadrada) {
+    var v = $('video'), c = document.createElement('canvas');
+    if (quadrada && box) { // foto do cadastro: recorte do rosto com folga
+      var lado = Math.min(Math.max(box.width, box.height) * 1.9, v.videoWidth, v.videoHeight);
+      var x = Math.max(0, Math.min(v.videoWidth - lado, box.x + box.width / 2 - lado / 2)), y = Math.max(0, Math.min(v.videoHeight - lado, box.y + box.height / 2 - lado / 2));
+      c.width = c.height = 480; c.getContext('2d').drawImage(v, x, y, lado, lado, 0, 0, 480, 480);
+    } else {
+      var esc = Math.min(1, 480 / Math.min(v.videoWidth, v.videoHeight));
+      c.width = Math.round(v.videoWidth * esc); c.height = Math.round(v.videoHeight * esc);
+      c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    }
+    return c.toDataURL('image/jpeg', 0.8);
+  }
+
+  // lê 1 rosto completo (detector + pontos + molde). Devolve {d, box} ou {erro}
+  function lerRosto(opc, minLado) {
+    var v = $('video');
+    return faceapi.detectSingleFace(v, opc).withFaceLandmarks().withFaceDescriptor().then(function (r) {
+      if (!r) return { erro: 'sem' };
+      var box = r.detection.box;
+      if (box.width / v.videoWidth < minLado) return { erro: 'longe', box: box };
+      if (!deFrente(r.landmarks)) return { erro: 'lado', box: box };
+      if (luz(box) < 45) return { erro: 'escuro', box: box };
+      return { d: Array.prototype.slice.call(r.descriptor), box: box, score: r.detection.score };
+    });
+  }
+  var DICA = { longe: ['Chegue mais perto', 'Rosto dentro do círculo'], lado: ['Olhe de frente', 'Rosto reto pra câmera'], escuro: ['Pouca luz no rosto', 'Fique de frente pra luz'] };
+
+  // ---------- loop do reconhecimento ----------
+  function agenda(ms) { setTimeout(passo, ms); }
+  function passo() {
+    if (E.modo !== 'reconhecer' || E.ocupado || document.hidden) return agenda(400);
+    if (Date.now() < E.pausaAte) return agenda(300);
+    var v = $('video'); if (!v.videoWidth) return agenda(500);
+    // 1º só o detector rápido (barato); o molde só quando tem rosto
+    faceapi.detectSingleFace(v, OPC_RAPIDO).then(function (det) {
+      if (!det) { E.bons = []; moldura(''); if (Date.now() - E.ultimoRosto > 1500) status('Olhe para a câmera', 'Aproxime o rosto do círculo'); return agenda(350); }
+      E.ultimoRosto = Date.now();
+      moldura('viu');
+      return lerRosto(OPC_RAPIDO, 0.16).then(function (r) {
+        if (r.erro) { E.bons = []; if (DICA[r.erro]) { status(DICA[r.erro][0], DICA[r.erro][1]); moldura('ruim'); } return agenda(250); }
+        // 2 leituras seguidas parecidas = rosto firme na frente (evita borrão)
+        if (E.bons.length && distancia(E.bons[E.bons.length - 1].d, r.d) > 0.35) E.bons = [];
+        E.bons.push(r);
+        if (E.bons.length < 2) { status('Segure um instante…', ''); return agenda(80); }
+        var molde = media(E.bons.map(function (b) { return b.d; }));
+        E.bons = [];
+        return reconhecer(molde, selfie(r.box, false));
+      });
+    }).catch(function (e) { console.error(e); agenda(800); });
+  }
+
+  function reconhecer(molde, foto) {
+    E.ocupado = true; moldura('ok'); status('Reconhecendo…', '');
+    return post({ acao: 'reconhecer', descritor: molde, foto: foto }).then(function (j) {
+      E.falhasRede = 0;
+      if (!j.reconhecido) {
+        mostrar('erro', '🚫', 'Não reconhecido', '', '', j.sem_moldes ? 'Nenhum rosto cadastrado ainda — chame o gerente' : 'Chame o gerente', 3500);
+        E.pausaAte = Date.now() + 6000;
+        return;
+      }
+      var primeiro = String(j.nome || '').split(' ')[0];
+      var visto = E.vistos[j.pessoa_id];
+      if (j.repetido || (visto && Date.now() - visto < ESPERA_MESMA)) {
+        mostrar('rep', '👌', 'Já registrado', j.nome, j.hora, (j.tipo === 'saida' ? 'Saída' : 'Entrada') + ' já marcada — pode seguir, ' + primeiro, 2600);
+      } else {
+        E.vistos[j.pessoa_id] = Date.now();
+        var s = j.tipo === 'saida';
+        mostrar(s ? 'saida' : 'entrada', s ? '👋' : '✅', s ? 'Saída' : 'Entrada', j.nome, j.hora, s ? 'Até mais, ' + primeiro + '!' : 'Bom trabalho, ' + primeiro + '!', 3500);
+        if (navigator.vibrate) try { navigator.vibrate(s ? [80, 60, 80] : 150); } catch (e) {}
+      }
+      E.pausaAte = Date.now() + 5000;
+    }).catch(function (e) {
+      E.falhasRede++;
+      mostrar('erro', '📶', 'Não registrou', '', '', semNet(e) + ' — tente de novo', 3000);
+      E.pausaAte = Date.now() + 4000;
+    }).then(function () { E.ocupado = false; agenda(200); });
+  }
+
+  var tRes = null;
+  function mostrar(cls, ic, acao, nome, hora, msg, ms) {
+    $('res').className = 'on ' + cls; status('', '');
+    $('r-ic').textContent = ic; $('r-acao').textContent = acao; $('r-nome').textContent = nome || ''; $('r-hora').textContent = hora || ''; $('r-msg').textContent = msg || '';
+    $('r-nome').style.display = nome ? '' : 'none'; $('r-hora').style.display = hora ? '' : 'none';
+    clearTimeout(tRes); tRes = setTimeout(function () { $('res').className = ''; moldura(''); status('Olhe para a câmera', ''); }, ms);
+  }
+  $('res').onclick = function () { $('res').className = ''; };
+
+  // ---------- modo cadastro (PIN do gerente) ----------
+  var pin = '';
+  (function () {
+    var t = $('teclado');
+    ['1','2','3','4','5','6','7','8','9','⌫','0','✓'].forEach(function (k) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = k; if (k === '✓') b.className = 'verde';
+      b.onclick = function () { tecla(k); }; t.appendChild(b);
+    });
+    var tipos = ['Extra', 'Gerente', 'Manutenção', 'Terceiro', 'CLT'];
+    tipos.forEach(function (tp, i) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = tp; if (!i) b.className = 'sel';
+      b.onclick = function () { document.querySelectorAll('#nova-tipos button').forEach(function (x) { x.classList.toggle('sel', x === b); }); };
+      $('nova-tipos').appendChild(b);
+    });
+  })();
+  function pintarPin() { var sp = $('digitos').children; for (var i = 0; i < 6; i++) { sp[i].textContent = pin[i] ? '•' : ''; sp[i].classList.toggle('cheio', !!pin[i]); } }
+  function tecla(k) {
+    $('pin-erro').textContent = '';
+    if (k === '⌫') pin = pin.slice(0, -1); else if (k === '✓') { if (pin.length >= 4) enviarPin(); } else if (pin.length < 6) pin += k;
+    pintarPin();
+    if (pin.length === 6 && k !== '✓' && k !== '⌫') enviarPin();
+  }
+  function enviarPin() {
+    var p = pin; pin = ''; pintarPin();
+    post({ acao: 'pin', pin: p }).then(function (j) { E.passe = j.t; E.passeAte = Date.now() + 14 * 60000; abrirMenuCad(); })
+      .catch(function (e) { $('pin-erro').textContent = semNet(e); });
+  }
+  function noPasse() { return E.passe && Date.now() < E.passeAte; }
+  $('engrenagem').onclick = function () {
+    if (noPasse()) return abrirMenuCad();
+    E.modo = 'pin'; pin = ''; pintarPin(); $('pin-erro').textContent = ''; tela('t-pin');
+  };
+  $('pin-voltar').onclick = voltarAcesso;
+  $('cad-sair').onclick = function () { E.passe = null; voltarAcesso(); };
+  function voltarAcesso() { E.modo = 'reconhecer'; E.alvo = null; tela(''); $('cad-foto-barra').classList.remove('on'); $('faixa-cad').classList.remove('on'); moldura(''); status('Olhe para a câmera', ''); config().catch(function () {}); }
+
+  var listaCad = [];
+  function abrirMenuCad() {
+    E.modo = 'cad'; tela('t-cad'); $('faixa-cad').classList.add('on'); $('cad-foto-barra').classList.remove('on');
+    $('cad-busca').value = ''; $('cad-lista').innerHTML = '<p class="sub">carregando…</p>';
+    post({ acao: 'sem_rosto', t: E.passe }).then(function (j) { listaCad = j.pessoas || []; pintarCad(''); })
+      .catch(function (e) { if (e.j && e.j.pin) { E.passe = null; $('engrenagem').onclick(); return; } $('cad-lista').innerHTML = ''; var p = document.createElement('p'); p.className = 'erro'; p.textContent = semNet(e); $('cad-lista').appendChild(p); });
+  }
+  function semAcento(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function pintarCad(f) {
+    var l = $('cad-lista'); l.innerHTML = ''; var ft = semAcento(f).trim();
+    var ps = listaCad.filter(function (p) { return !ft || semAcento(p.nome).indexOf(ft) >= 0; });
+    if (!ps.length) { var v = document.createElement('p'); v.className = 'sub'; v.textContent = listaCad.length ? 'Ninguém com esse nome — use "Pessoa NOVA".' : 'Todo mundo desta casa já tem rosto cadastrado 🎉'; l.appendChild(v); return; }
+    ps.slice(0, 120).forEach(function (p) {
+      var b = document.createElement('button'); b.type = 'button';
+      var n = document.createElement('span'); n.textContent = p.nome; b.appendChild(n);
+      var i = document.createElement('i'); i.textContent = p.tipo || ''; b.appendChild(i);
+      b.onclick = function () { fotoCad({ pessoa_id: p.id, nome: p.nome }); };
+      l.appendChild(b);
+    });
+  }
+  $('cad-busca').addEventListener('input', function () { pintarCad(this.value); });
+  $('cad-nova').onclick = function () { $('nova-nome').value = ''; $('nova-erro').textContent = ''; tela('t-nova'); setTimeout(function () { try { $('nova-nome').focus(); } catch (e) {} }, 60); };
+  $('nova-voltar').onclick = abrirMenuCad;
+  $('nova-ok').onclick = function () {
+    var nome = $('nova-nome').value.trim().replace(/\s+/g, ' ');
+    if (nome.length < 3 || nome.indexOf(' ') < 0) { $('nova-erro').textContent = 'Digite nome e sobrenome'; return; }
+    var tp = document.querySelector('#nova-tipos button.sel'); fotoCad({ nome: nome, tipo: tp ? tp.textContent : 'Extra' });
+  };
+  function fotoCad(alvo) {
+    E.alvo = alvo; E.modo = 'cadfoto'; tela(''); moldura('');
+    $('cf-t').textContent = '📸 Foto de: ' + alvo.nome; $('cf-s').textContent = 'Rosto de frente, dentro do círculo, com luz no rosto';
+    $('cf-foto').disabled = false; $('cf-foto').textContent = '📸 Capturar';
+    $('cad-foto-barra').classList.add('on'); status('', '');
+  }
+  $('cf-cancelar').onclick = abrirMenuCad;
+  $('cf-foto').onclick = function () {
+    var b = $('cf-foto'); if (b.disabled) return;
+    b.disabled = true; b.textContent = '⏳ lendo o rosto…';
+    var leituras = [], tent = 0, ultimaBox = null;
+    (function ler() {
+      if (E.modo !== 'cadfoto') return;
+      if (tent++ > 25) { $('cf-s').textContent = 'Não consegui uma leitura boa. Mais luz no rosto e tente de novo.'; b.disabled = false; b.textContent = '📸 Capturar'; moldura('ruim'); return; }
+      lerRosto(OPC_CAD, 0.22).then(function (r) {
+        if (r.erro) { leituras = []; $('cf-s').textContent = r.erro === 'sem' ? 'Não achei o rosto — olhe pra câmera' : DICA[r.erro][0] + ' — ' + DICA[r.erro][1]; moldura('ruim'); return setTimeout(ler, 150); }
+        if (leituras.length && distancia(leituras[0], r.d) > 0.3) leituras = [];
+        leituras.push(r.d); ultimaBox = r.box; moldura('viu');
+        $('cf-s').textContent = 'Segure… ' + leituras.length + '/3';
+        if (leituras.length < 3) return setTimeout(ler, 120);
+        moldura('ok');
+        var foto = selfie(ultimaBox, true);
+        b.textContent = '⏳ salvando…';
+        var corpo = { acao: 'cadastrar', t: E.passe, descritor: media(leituras), foto: foto };
+        if (E.alvo.pessoa_id != null) corpo.pessoa_id = E.alvo.pessoa_id; else { corpo.nome = E.alvo.nome; corpo.tipo = E.alvo.tipo; }
+        return post(corpo).then(function (j) {
+          $('cad-foto-barra').classList.remove('on');
+          mostrar('entrada', '🎉', 'Rosto cadastrado', j.nome, '', j.pendente ? 'Pessoa nova: em até 1 minuto o rosto já passa a valer' : 'Já pode bater o rosto no acesso', 4000);
+          setTimeout(abrirMenuCad, 4000);
+        }).catch(function (e) {
+          if (e.j && e.j.pin) { E.passe = null; $('cad-foto-barra').classList.remove('on'); $('engrenagem').onclick(); return; }
+          $('cf-s').textContent = semNet(e); b.disabled = false; b.textContent = '📸 Capturar de novo'; moldura('ruim');
+        });
+      }).catch(function (e) { console.error(e); setTimeout(ler, 300); });
+    })();
+  };
+
+  // ---------- tela sempre acesa / tela cheia ----------
+  function manterAcesa() { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(function () {}); } catch (e) {} }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { manterAcesa(); config().catch(function () {}); } });
+  document.addEventListener('click', function () { try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {}); } catch (e) {} }, { once: true });
+  setInterval(function () { config().catch(function () {}); }, 5 * 60000);
+
+  // ---------- começo ----------
+  if (!CASA || !K) { falha('🔒', 'Aparelho não configurado', 'Abra o link da casa enviado pelo escritório.'); return; }
+  if (!window.faceapi) { falha('📶', 'Não carregou o leitor de rosto', 'Confira a internet e toque em tentar de novo.', true); return; }
+  manterAcesa();
+  config().then(function () { return carregarModelos(); }).then(function () {
+    status('Abrindo a câmera…', '');
+    return abrirCamera();
+  }).then(function () {
+    tela(''); status('Olhe para a câmera', E.rostos ? '' : 'Nenhum rosto cadastrado ainda — use ⚙️');
+    agenda(300);
+  }).catch(function (e) {
+    console.error(e);
+    if (/autorizado/i.test(e.message)) falha('🔒', e.message, '');
+    else if (/Permission|NotAllowed|denied/i.test(e.name + ' ' + e.message)) falha('📷', 'Câmera bloqueada', 'Toque no cadeado ao lado do endereço → Permissões → Câmera → Permitir. Depois tente de novo.', true);
+    else falha('⚠️', 'Não deu pra iniciar', semNet(e), true);
+  });
+})();
+</script>
+</body>
+</html>
