@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="robots" content="noindex, nofollow">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icone-192.png">
+<title>Check-in Botequim</title>
+<!-- 🤳 Check-in das casas do Grupo Botequim — controle de PRESENÇA (não é o ponto oficial).
+     A casa fica fixa no aparelho pelo link (?casa=&k=). Fala só com a Edge Function "presenca";
+     a hora gravada é a do servidor. Sem login, sem senha. -->
+<style>
+  :root { --bg:#0b1220; --card:#131c2e; --borda:#24314d; --tx:#f1f5f9; --sub:#94a3b8; --ok:#22c55e; --sai:#f97316; --ac:#facc15; --erro:#ef4444; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--tx); font-family: system-ui, -apple-system, Roboto, "Segoe UI", sans-serif; overscroll-behavior:none; user-select:none; -webkit-user-select:none; }
+  body { display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px 8px; gap:12px; }
+  header .casa { font-size:1.3rem; font-weight:800; }
+  header .casa small { display:block; font-size:.8rem; color:var(--sub); font-weight:600; }
+  header .relogio { font-size:2.4rem; font-weight:800; font-variant-numeric:tabular-nums; color:var(--ac); }
+  main { flex:1; display:flex; flex-direction:column; padding:8px 18px 18px; min-height:0; }
+  .tela { display:none; flex:1; flex-direction:column; min-height:0; }
+  .tela.on { display:flex; }
+  h1 { font-size:1.9rem; margin:6px 0 4px; text-align:center; }
+  .sub { color:var(--sub); text-align:center; font-size:1.1rem; margin:0 0 10px; }
+  .digitos { display:flex; justify-content:center; gap:12px; margin:10px 0 16px; }
+  .digitos span { width:64px; height:76px; border-radius:14px; border:3px solid var(--borda); background:var(--card); font-size:2.6rem; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .digitos span.cheio { border-color:var(--ac); }
+  .teclado { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; flex:1; max-height:420px; }
+  .teclado button { font-size:2.2rem; font-weight:700; }
+  button { border:0; border-radius:16px; background:var(--card); color:var(--tx); font:inherit; padding:14px; border:2px solid var(--borda); cursor:pointer; touch-action:manipulation; }
+  button:active { transform:scale(.97); filter:brightness(1.3); }
+  .grande { font-size:1.5rem; font-weight:800; padding:20px; width:100%; margin-top:12px; }
+  .verde { background:var(--ok); border-color:var(--ok); color:#04130a; }
+  .laranja { background:var(--sai); border-color:var(--sai); color:#1a0b02; }
+  .cinza { background:transparent; }
+  .lista { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+  .lista button { text-align:left; font-size:1.35rem; font-weight:700; padding:16px 18px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .lista button i { font-style:normal; font-size:.95rem; font-weight:700; padding:4px 10px; border-radius:99px; background:#22c55e22; color:var(--ok); white-space:nowrap; }
+  .lista button i.s { background:#f9731622; color:var(--sai); }
+  input.busca { width:100%; font-size:1.4rem; padding:14px 16px; border-radius:14px; border:2px solid var(--borda); background:var(--card); color:var(--tx); user-select:text; -webkit-user-select:text; }
+  .nome { font-size:2.4rem; font-weight:900; text-align:center; margin:18px 0 6px; line-height:1.15; word-break:break-word; }
+  .acao { text-align:center; font-size:1.5rem; font-weight:800; margin:8px 0 14px; }
+  .acao.e { color:var(--ok); } .acao.s { color:var(--sai); }
+  .cam { position:relative; flex:1; min-height:280px; border-radius:22px; overflow:hidden; background:#000; border:3px solid var(--borda); }
+  .cam video, .cam img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+  .cam .contagem { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:7rem; font-weight:900; color:#fff; text-shadow:0 4px 30px #000; }
+  .cam .moldura { position:absolute; left:50%; top:46%; width:62%; aspect-ratio:3/4; transform:translate(-50%,-50%); border:4px dashed #ffffff88; border-radius:50%; pointer-events:none; }
+  .flash { position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; transition:opacity .25s; }
+  .flash.on { opacity:.9; transition:none; }
+  .resultado { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:8px; }
+  .resultado .ic { font-size:6rem; }
+  .resultado .hora { font-size:4.4rem; font-weight:900; font-variant-numeric:tabular-nums; }
+  .resultado .msg { font-size:1.9rem; font-weight:800; }
+  .resultado .quem { font-size:1.4rem; color:var(--sub); }
+  .erro { color:var(--erro); text-align:center; font-weight:700; font-size:1.2rem; min-height:1.4em; margin:6px 0; }
+  .rodape { color:var(--sub); text-align:center; font-size:.85rem; padding:6px; }
+  .linha { display:flex; gap:10px; } .linha > * { flex:1; }
+  .carregando { opacity:.6; pointer-events:none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="casa" id="casa">Check-in<small>Grupo Botequim</small></div>
+  <div class="relogio" id="relogio">--:--</div>
+</header>
+<main>
+  <!-- 0. sem configuração -->
+  <section class="tela" id="t-config">
+    <div class="resultado"><div class="ic">🔒</div><div class="msg" id="config-msg">Aparelho não configurado</div><div class="quem">Abra o link da casa enviado pelo escritório.</div></div>
+  </section>
+
+  <!-- 1. início: 4 últimos do CPF -->
+  <section class="tela" id="t-inicio">
+    <h1>Check-in / Check-out</h1>
+    <p class="sub">Digite os <b>4 últimos números</b> do seu CPF</p>
+    <div class="digitos" id="digitos"><span></span><span></span><span></span><span></span></div>
+    <div class="erro" id="erro-inicio"></div>
+    <div class="teclado" id="teclado"></div>
+    <button class="grande cinza" id="b-nome">🔎 Procurar pelo nome</button>
+  </section>
+
+  <!-- 1b. escolher o nome -->
+  <section class="tela" id="t-nomes">
+    <h1 id="nomes-titulo">Quem é você?</h1>
+    <input class="busca" id="busca" placeholder="Digite seu nome…" autocomplete="off" autocapitalize="words">
+    <div class="lista" id="lista"></div>
+    <button class="grande cinza" id="b-voltar-nomes">← Voltar</button>
+  </section>
+
+  <!-- 2. confirmar -->
+  <section class="tela" id="t-confirma">
+    <p class="sub" style="margin-top:20px">Você é…</p>
+    <div class="nome" id="conf-nome"></div>
+    <div class="acao" id="conf-acao"></div>
+    <div style="flex:1"></div>
+    <button class="grande verde" id="b-sim">✅ Sim, sou eu — tirar selfie</button>
+    <button class="grande cinza" id="b-nao">✖ Não sou eu</button>
+  </section>
+
+  <!-- 3. selfie -->
+  <section class="tela" id="t-selfie">
+    <p class="sub" id="selfie-dica">Olhe para a câmera 🙂</p>
+    <div class="cam" id="cam">
+      <video id="video" playsinline autoplay muted></video>
+      <img id="previa" alt="" style="display:none">
+      <div class="moldura"></div>
+      <div class="contagem" id="contagem"></div>
+    </div>
+    <div class="erro" id="erro-selfie"></div>
+    <div class="linha">
+      <button class="grande cinza" id="b-cancelar">✖ Cancelar</button>
+      <button class="grande verde" id="b-foto">📸 Tirar foto</button>
+    </div>
+    <input type="file" id="arquivo" accept="image/*" capture="user" style="display:none">
+  </section>
+
+  <!-- 4. resultado -->
+  <section class="tela" id="t-ok">
+    <div class="resultado">
+      <div class="ic" id="ok-ic">✅</div>
+      <div class="msg" id="ok-msg">Entrada registrada</div>
+      <div class="hora" id="ok-hora">--:--</div>
+      <div class="quem" id="ok-quem"></div>
+    </div>
+    <button class="grande cinza" id="b-ok">OK</button>
+  </section>
+</main>
+<div class="rodape" id="rodape">Controle de presença · não substitui o ponto do relógio</div>
+<div class="flash" id="flash"></div>
+
+<script>
+(function () {
+  'use strict';
+  var FN = 'https://kuyhkltbwlkvtgbabscv.supabase.co/functions/v1/presenca';
+  var $ = function (id) { return document.getElementById(id); };
+  var qs = new URLSearchParams(location.search);
+  var CASA = qs.get('casa') || '', K = qs.get('k') || '';
+  try {
+    if (CASA && K) { localStorage.setItem('ci_casa', CASA); localStorage.setItem('ci_k', K); }
+    else { CASA = localStorage.getItem('ci_casa') || ''; K = localStorage.getItem('ci_k') || ''; }
+  } catch (e) {}
+
+  var estado = { digitos: '', pessoas: [], pessoa: null, offset: 0, stream: null, enviando: false };
+  var timerVolta = null, timerIdle = null;
+
+  function tela(id) {
+    document.querySelectorAll('.tela').forEach(function (t) { t.classList.toggle('on', t.id === id); });
+    clearTimeout(timerIdle);
+    if (id !== 't-inicio' && id !== 't-config') timerIdle = setTimeout(inicio, id === 't-selfie' ? 60000 : 40000);
+  }
+  function hhmm(d) { return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }); }
+  function relogio() { $('relogio').textContent = hhmm(new Date(Date.now() + estado.offset)); }
+  setInterval(relogio, 1000); relogio();
+
+  function chamar(params) {
+    var u = FN + '?casa=' + encodeURIComponent(CASA) + '&k=' + encodeURIComponent(K) + (params || '');
+    return fetch(u, { cache: 'no-store' }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.erro || ('erro ' + r.status)); return j; }); });
+  }
+  function semNet(e) { return /Failed to fetch|NetworkError|Load failed|network/i.test(String(e && e.message)) ? 'Sem internet — confira o Wi-Fi e tente de novo' : (e && e.message) || 'Erro'; }
+
+  function carregar() {
+    return chamar('&acao=lista').then(function (j) {
+      estado.pessoas = j.pessoas || [];
+      if (j.agora) estado.offset = new Date(j.agora).getTime() - Date.now();
+      $('casa').innerHTML = '';
+      $('casa').appendChild(document.createTextNode('📍 ' + j.casa.nome));
+      var s = document.createElement('small'); s.textContent = 'Check-in · Grupo Botequim'; $('casa').appendChild(s);
+      return j;
+    });
+  }
+
+  // ---------- início / teclado ----------
+  function pintarDigitos() {
+    var sp = $('digitos').children;
+    for (var i = 0; i < 4; i++) { sp[i].textContent = estado.digitos[i] || ''; sp[i].classList.toggle('cheio', !!estado.digitos[i]); }
+  }
+  function inicio() {
+    pararCamera();
+    clearTimeout(timerVolta);
+    estado.digitos = ''; estado.pessoa = null; pintarDigitos();
+    $('erro-inicio').textContent = '';
+    tela('t-inicio');
+  }
+  (function montarTeclado() {
+    var t = $('teclado');
+    ['1','2','3','4','5','6','7','8','9','⌫','0','✓'].forEach(function (k) {
+      var b = document.createElement('button'); b.textContent = k; b.type = 'button';
+      if (k === '✓') b.className = 'verde';
+      b.onclick = function () { tecla(k); };
+      t.appendChild(b);
+    });
+  })();
+  function tecla(k) {
+    $('erro-inicio').textContent = '';
+    if (k === '⌫') estado.digitos = estado.digitos.slice(0, -1);
+    else if (k === '✓') { if (estado.digitos.length === 4) buscarCpf(); else $('erro-inicio').textContent = 'Faltam números'; }
+    else if (estado.digitos.length < 4) estado.digitos += k;
+    pintarDigitos();
+    if (k !== '✓' && k !== '⌫' && estado.digitos.length === 4) buscarCpf();
+  }
+  function buscarCpf() {
+    var d = estado.digitos;
+    $('teclado').classList.add('carregando');
+    chamar('&acao=buscar&cpf4=' + d).then(function (j) {
+      var ps = j.pessoas || [];
+      if (!ps.length) { $('erro-inicio').textContent = 'Não achei esse CPF. Procure pelo nome ou fale com o gerente.'; estado.digitos = ''; pintarDigitos(); return; }
+      if (ps.length === 1) return confirmar(ps[0]);
+      listar(ps, 'Qual é você?', false);
+    }).catch(function (e) { $('erro-inicio').textContent = semNet(e); estado.digitos = ''; pintarDigitos(); })
+      .then(function () { $('teclado').classList.remove('carregando'); });
+  }
+
+  // ---------- lista por nome ----------
+  function tirarAcento(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  var listaAtual = [];
+  function listar(ps, titulo, comBusca) {
+    listaAtual = ps;
+    $('nomes-titulo').textContent = titulo;
+    $('busca').style.display = comBusca ? '' : 'none';
+    $('busca').value = '';
+    pintarLista('');
+    tela('t-nomes');
+  }
+  function pintarLista(f) {
+    var l = $('lista'); l.innerHTML = '';
+    var ft = tirarAcento(f).trim();
+    var ps = listaAtual.filter(function (p) { return !ft || tirarAcento(p.nome).indexOf(ft) >= 0; });
+    if (!ps.length) { var v = document.createElement('p'); v.className = 'sub'; v.textContent = 'Ninguém com esse nome. Fale com o gerente para ser cadastrado.'; l.appendChild(v); return; }
+    ps.slice(0, 80).forEach(function (p) {
+      var b = document.createElement('button'); b.type = 'button';
+      var n = document.createElement('span'); n.textContent = p.nome; b.appendChild(n);
+      var i = document.createElement('i'); i.textContent = p.proximo === 'saida' ? 'na loja desde ' + p.desde : (p.tipo || ''); if (p.proximo === 'saida') i.className = 's'; else i.style.opacity = '.7';
+      b.appendChild(i);
+      b.onclick = function () { confirmar(p); };
+      l.appendChild(b);
+    });
+  }
+  $('busca').addEventListener('input', function () { pintarLista(this.value); clearTimeout(timerIdle); timerIdle = setTimeout(inicio, 40000); });
+  $('b-nome').onclick = function () {
+    $('b-nome').classList.add('carregando');
+    carregar().then(function () { listar(estado.pessoas, 'Quem é você?', true); setTimeout(function () { try { $('busca').focus(); } catch (e) {} }, 50); })
+      .catch(function (e) { $('erro-inicio').textContent = semNet(e); })
+      .then(function () { $('b-nome').classList.remove('carregando'); });
+  };
+  $('b-voltar-nomes').onclick = inicio;
+
+  // ---------- confirmar ----------
+  function confirmar(p) {
+    estado.pessoa = p;
+    $('conf-nome').textContent = p.nome;
+    var s = p.proximo === 'saida';
+    $('conf-acao').textContent = s ? '🔴 Vai registrar SAÍDA' : '🟢 Vai registrar ENTRADA';
+    $('conf-acao').className = 'acao ' + (s ? 's' : 'e');
+    tela('t-confirma');
+  }
+  $('b-nao').onclick = inicio;
+  $('b-sim').onclick = abrirCamera;
+
+  // ---------- câmera ----------
+  function pararCamera() {
+    if (estado.stream) { estado.stream.getTracks().forEach(function (t) { t.stop(); }); estado.stream = null; }
+    $('video').srcObject = null;
+  }
+  var contando = null;
+  function abrirCamera() {
+    $('erro-selfie').textContent = ''; $('contagem').textContent = '';
+    $('previa').style.display = 'none'; $('video').style.display = '';
+    $('b-foto').disabled = false; $('b-foto').textContent = '📸 Tirar foto'; $('b-foto').onclick = capturar;
+    tela('t-selfie');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('selfie-dica').textContent = 'Toque em "Tirar foto" para abrir a câmera'; return; }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false }).then(function (s) {
+      estado.stream = s; $('video').srcObject = s;
+      $('selfie-dica').textContent = 'Olhe para a câmera 🙂';
+      // contagem automática 3-2-1
+      var n = 3; $('contagem').textContent = n;
+      clearInterval(contando);
+      contando = setInterval(function () {
+        if (!estado.stream) { clearInterval(contando); return; }
+        n--; if (n > 0) $('contagem').textContent = n; else { clearInterval(contando); $('contagem').textContent = ''; capturar(); }
+      }, 1000);
+    }).catch(function () {
+      $('selfie-dica').textContent = 'Câmera bloqueada — toque em "Tirar foto"';
+    });
+  }
+  function capturar() {
+    if (estado.enviando) return;
+    var v = $('video');
+    if (!estado.stream || !v.videoWidth) { $('arquivo').click(); return; }
+    clearInterval(contando); $('contagem').textContent = '';
+    var c = document.createElement('canvas');
+    var lado = Math.min(v.videoWidth, v.videoHeight), escala = Math.min(1, 480 / lado);
+    c.width = Math.round(v.videoWidth * escala); c.height = Math.round(v.videoHeight * escala);
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    $('flash').classList.add('on'); setTimeout(function () { $('flash').classList.remove('on'); }, 60);
+    var url = c.toDataURL('image/jpeg', 0.72);
+    $('previa').src = url; $('previa').style.display = ''; $('video').style.display = 'none';
+    pararCamera();
+    enviar(url);
+  }
+  $('b-foto').onclick = capturar;
+  $('b-cancelar').onclick = function () { clearInterval(contando); inicio(); };
+  $('arquivo').onchange = function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    var img = new Image();
+    img.onload = function () {
+      var escala = Math.min(1, 640 / Math.max(img.width, img.height));
+      var c = document.createElement('canvas'); c.width = Math.round(img.width * escala); c.height = Math.round(img.height * escala);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      var url = c.toDataURL('image/jpeg', 0.72);
+      $('previa').src = url; $('previa').style.display = ''; $('video').style.display = 'none';
+      enviar(url);
+    };
+    img.src = URL.createObjectURL(f);
+    this.value = '';
+  };
+
+  // ---------- enviar ----------
+  function enviar(foto) {
+    estado.enviando = true;
+    $('b-foto').disabled = true; $('b-foto').textContent = '⏳ Enviando…'; $('erro-selfie').textContent = '';
+    fetch(FN, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ casa: CASA, k: K, pessoa_id: estado.pessoa.id, foto: foto }) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.erro || ('erro ' + r.status)); return j; }); })
+      .then(function (j) {
+        var s = j.tipo === 'saida';
+        $('ok-ic').textContent = s ? '👋' : '✅';
+        $('ok-msg').textContent = s ? 'Saída registrada' : 'Entrada registrada';
+        $('ok-msg').style.color = s ? 'var(--sai)' : 'var(--ok)';
+        $('ok-hora').textContent = j.hora;
+        $('ok-quem').textContent = (s ? 'Até mais, ' : 'Bom trabalho, ') + String(j.nome || '').split(' ')[0] + '!';
+        tela('t-ok');
+        if (navigator.vibrate) try { navigator.vibrate(120); } catch (e) {}
+        timerVolta = setTimeout(inicio, 6000);
+        carregar().catch(function () {});
+      })
+      .catch(function (e) {
+        $('erro-selfie').textContent = semNet(e);
+        $('b-foto').disabled = false; $('b-foto').textContent = '🔄 Tentar de novo';
+        $('b-foto').onclick = function () { $('b-foto').onclick = capturar; enviar(foto); };
+      })
+      .then(function () { estado.enviando = false; });
+  }
+  $('b-ok').onclick = inicio;
+
+  // ---------- tela sempre acesa ----------
+  var trava = null;
+  function manterAcesa() { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function (t) { trava = t; }).catch(function () {}); } catch (e) {} }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { manterAcesa(); carregar().catch(function () {}); } });
+
+  // ---------- começo ----------
+  if (!CASA || !K) { tela('t-config'); return; }
+  manterAcesa();
+  carregar().then(inicio).catch(function (e) {
+    if (/autorizado/i.test(e.message)) { $('config-msg').textContent = e.message; tela('t-config'); }
+    else { inicio(); $('erro-inicio').textContent = semNet(e); }
+  });
+  setInterval(function () { if ($('t-inicio').classList.contains('on')) carregar().catch(function () {}); }, 5 * 60000);
+})();
+</script>
+</body>
+</html>
