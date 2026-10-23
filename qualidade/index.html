@@ -156,7 +156,7 @@ const nomeCasa = (id) => { const c = CASAS.find((x) => x.id === id); return c ? 
 const ABAS = [['preencher', '✍️ Preencher'], ['relatorios', '📄 Relatórios'], ['comparativo', '📊 Comparativo'], ['epi', '🦺 Uniforme e EPI'], ['modelos', '🧩 Modelos'], ['casas', '🏠 Restaurantes']]
 let ABA = new URLSearchParams(location.search).get('aba') || 'preencher'
 function nav() { $('#nav').innerHTML = ABAS.map(([id, r]) => `<button class="${id === ABA ? 'on' : ''}" onclick="ir('${id}')">${r}</button>`).join('') }
-function ir(id, arg) { ABA = id; nav(); $('#barra').innerHTML = ''; window.scrollTo(0, 0); ({ preencher: telaInicio, relatorios: telaRelatorios, comparativo: telaComparativo, epi: telaEpi, modelos: telaModelos, casas: telaCasas, painel: telaPainel })[id](arg) }
+function ir(id, arg) { ABA = id; nav(); $('#barra').innerHTML = ''; window.scrollTo(0, 0); ({ preencher: telaInicio, relatorios: telaRelatorios, comparativo: telaComparativo, epi: telaEpi, modelos: telaModelos, casas: telaCasas })[id](arg) }
 async function carregarBase() { [CASAS, MODELOS] = await Promise.all([api('/api/qualidade/casas'), api('/api/qualidade/modelos')]) }
 
 // ======================================================= PREENCHER
