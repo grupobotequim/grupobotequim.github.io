@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="../logo.png">
+<title>Pesagem CD</title>
+<!-- ⚖️ 26/10/2026 — Pesagem do hortifruti no CD do Grupo Botequim. 1 foto da balança por caixa → a IA lê o peso.
+     Fala com a Edge Function "pesagem" (Supabase). Fila offline no IndexedDB: sem internet, as fotos esperam e sobem sozinhas. -->
+<style>
+:root{--bg:#f1f5f9;--card:#fff;--card2:#f8fafc;--ink:#0f172a;--ink2:#334155;--ink3:#64748b;--bord:#e2e8f0;--pri:#16a34a;--pri2:#15803d;--pri-bg:#dcfce7;--am:#d97706;--am-bg:#fef3c7;--x:#dc2626;--x-bg:#fee2e2;--az:#2563eb;--cam:#0b1220}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0b1220;--card:#131c2e;--card2:#1a2438;--ink:#f1f5f9;--ink2:#cbd5e1;--ink3:#94a3b8;--bord:#26324a;--pri:#22c55e;--pri2:#16a34a;--pri-bg:#123322;--am:#f59e0b;--am-bg:#3a2a0b;--x:#f87171;--x-bg:#3b1414;--az:#60a5fa}}
+:root[data-theme="dark"]{--bg:#0b1220;--card:#131c2e;--card2:#1a2438;--ink:#f1f5f9;--ink2:#cbd5e1;--ink3:#94a3b8;--bord:#26324a;--pri:#22c55e;--pri2:#16a34a;--pri-bg:#123322;--am:#f59e0b;--am-bg:#3a2a0b;--x:#f87171;--x-bg:#3b1414;--az:#60a5fa}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:16px}
+body{overscroll-behavior:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation}
+input{font:inherit;color:inherit}
+.tela{display:none;min-height:100%;flex-direction:column}
+.tela.on{display:flex}
+.topo{display:flex;align-items:center;gap:10px;padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top));background:var(--card);border-bottom:1px solid var(--bord);position:sticky;top:0;z-index:5}
+.topo h1{font-size:1.15rem;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topo .sub{font-size:.8rem;color:var(--ink3);font-weight:500}
+.voltar{width:44px;height:44px;border-radius:12px;background:var(--card2);font-size:1.4rem;flex:none}
+.net{font-size:.75rem;font-weight:700;padding:5px 9px;border-radius:999px;background:var(--pri-bg);color:var(--pri2);flex:none;white-space:nowrap}
+.net.off{background:var(--am-bg);color:var(--am)}
+.corpo{padding:14px 16px 28px;flex:1}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:60px;border-radius:16px;font-weight:800;font-size:1.1rem;background:var(--pri);color:#fff}
+.btn:active{transform:scale(.98)}
+.btn.sec{background:var(--card);color:var(--ink);border:2px solid var(--bord)}
+.btn.am{background:var(--am)}
+.btn.x{background:var(--card);color:var(--x);border:2px solid var(--x-bg)}
+.btn[disabled]{opacity:.5}
+.card{background:var(--card);border:1px solid var(--bord);border-radius:16px;padding:14px;margin-bottom:10px}
+.kick{font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin:18px 2px 8px}
+.op{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--card);border:2px solid var(--bord);border-radius:16px;padding:14px;margin-bottom:10px;min-height:68px}
+.op:active{border-color:var(--pri)}
+.op .ic{font-size:1.7rem;flex:none;width:36px;text-align:center}
+.op b{display:block;font-size:1.02rem}
+.op span{font-size:.82rem;color:var(--ink3)}
+.op .seta{margin-left:auto;color:var(--ink3);font-size:1.3rem}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:48px;padding:8px 14px;border-radius:999px;border:2px solid var(--bord);background:var(--card);font-weight:700;font-size:.95rem}
+.chip.on{border-color:var(--pri);background:var(--pri-bg);color:var(--pri2)}
+.erro{color:var(--x);font-weight:700;min-height:1.3em;margin-top:8px}
+/* login */
+#login .corpo{display:flex;flex-direction:column;justify-content:center;max-width:420px;margin:0 auto;width:100%}
+#login h1{font-size:2rem;margin:0 0 4px}
+#login input{width:100%;height:68px;font-size:2rem;text-align:center;letter-spacing:.3em;border-radius:16px;border:2px solid var(--bord);background:var(--card);margin:18px 0 12px}
+/* pesar */
+#pesar{height:100%;min-height:0;overflow:hidden}
+#pesar.on{display:flex}
+.cam{position:relative;background:var(--cam);flex:none;height:min(42vh,330px);overflow:hidden}
+.cam video,.cam img.prev{width:100%;height:100%;object-fit:cover;display:block}
+.cam .guia{position:absolute;inset:10px;border:2px dashed rgba(255,255,255,.35);border-radius:14px;pointer-events:none;display:flex;align-items:flex-start;justify-content:center}
+.cam .guia span{margin-top:8px;font-size:.78rem;color:#fff;background:rgba(0,0,0,.45);padding:3px 10px;border-radius:999px}
+.cam .semcam{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#cbd5e1;gap:10px;text-align:center;padding:20px}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+.flash.on{opacity:.75;transition:none}
+.res{position:absolute;left:10px;right:10px;bottom:10px;border-radius:16px;padding:10px 14px;background:rgba(15,23,42,.88);color:#fff;display:flex;align-items:center;gap:10px;min-height:64px;text-align:left;width:calc(100% - 20px)}
+.res .ic{font-size:1.8rem;flex:none}
+.res .tx{flex:1;min-width:0}
+.res .l1{font-size:1.25rem;font-weight:800;display:flex;gap:6px;align-items:baseline;min-width:0}.res .l1 .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:1.05rem}.res .l1 .kgv{white-space:nowrap;flex:none}
+.res .l2{font-size:.8rem;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res.ok{background:rgba(21,128,61,.94)}
+.res.am{background:rgba(180,83,9,.95)}
+.res.x{background:rgba(185,28,28,.95)}
+.res .fix{flex:none;background:rgba(255,255,255,.2);border-radius:10px;padding:8px 10px;font-weight:800;font-size:.85rem}
+.spin{width:26px;height:26px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:g 0.8s linear infinite;flex:none}
+@keyframes g{to{transform:rotate(360deg)}}
+.itens{flex:1;overflow-y:auto;padding:10px 12px 12px;min-height:0}
+.itens .kick{margin:4px 2px 8px}
+.grade{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.it{position:relative;min-height:66px;border-radius:14px;border:2px solid var(--bord);background:var(--card);padding:6px 6px 5px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.it .e{font-size:1.35rem;line-height:1.1}
+.it .n{font-size:.78rem;font-weight:700;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.it .c{font-size:.7rem;color:var(--ink3);font-weight:700}
+.it.on{border-color:var(--pri);background:var(--pri-bg);box-shadow:0 0 0 2px var(--pri) inset}
+.it.feito .c{color:var(--pri2)}.it.passou .c{color:var(--am)}
+.it.auto .n{font-size:.82rem}
+.mais{width:100%;margin-top:10px;min-height:46px;border-radius:12px;border:2px dashed var(--bord);color:var(--ink3);font-weight:700}
+.barra{flex:none;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;padding:10px 14px;padding-bottom:max(12px,env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--bord)}
+.tiro{width:84px;height:84px;border-radius:50%;background:var(--pri);color:#fff;font-size:2rem;box-shadow:0 0 0 6px var(--pri-bg),0 6px 16px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;flex-direction:column;line-height:1}
+.tiro small{font-size:.62rem;font-weight:800;letter-spacing:.08em;margin-top:2px}
+.tiro:active{transform:scale(.94)}
+.lado{min-height:56px;border-radius:14px;background:var(--card2);border:2px solid var(--bord);font-weight:700;font-size:.82rem;padding:6px 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2;text-align:center;min-width:0}
+.lado b{font-size:1.05rem}
+.lado .p{font-size:.7rem;color:var(--ink3);font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* sheet */
+.veu{position:fixed;inset:0;background:rgba(2,6,23,.55);z-index:20;display:none}
+.veu.on{display:block}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:92vh;overflow-y:auto;background:var(--bg);border-radius:22px 22px 0 0;z-index:21;padding:8px 16px max(18px,env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .22s ease-out}
+.sheet.on{transform:none}
+.sheet .alca{width:44px;height:5px;border-radius:9px;background:var(--bord);margin:4px auto 10px}
+.sheet h2{font-size:1.2rem;margin:4px 0 12px}
+.foto-g{width:100%;border-radius:14px;display:block;max-height:38vh;object-fit:contain;background:#000}
+.peso-in{display:flex;align-items:center;gap:8px;margin:12px 0}
+.peso-in input{flex:1;min-width:0;height:64px;border-radius:14px;border:2px solid var(--bord);background:var(--card);font-size:1.9rem;font-weight:800;text-align:center}
+.peso-in span{font-size:1.2rem;font-weight:800;color:var(--ink3)}
+.mini{font-size:.82rem;color:var(--ink3)}
+.lin{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--bord);width:100%;text-align:left;min-height:58px}
+.lin img{width:52px;height:52px;object-fit:cover;border-radius:10px;flex:none;background:var(--card2)}
+.lin .tx{flex:1;min-width:0}
+.lin b{display:block;font-size:.98rem}
+.lin .kg{font-weight:800;font-size:1.05rem;white-space:nowrap}
+.tag{display:inline-block;font-size:.7rem;font-weight:800;border-radius:6px;padding:1px 6px}
+.tag.ok{background:var(--pri-bg);color:var(--pri2)}.tag.am{background:var(--am-bg);color:var(--am)}.tag.x{background:var(--x-bg);color:var(--x)}.tag.az{background:var(--card2);color:var(--ink3)}
+/* resumo */
+.ri{background:var(--card);border:1px solid var(--bord);border-radius:16px;padding:12px 14px;margin-bottom:8px}
+.ri .h{display:flex;align-items:center;gap:8px}
+.ri .h b{font-size:1.02rem;flex:1;min-width:0}
+.ri .h .kg{font-size:1.15rem;font-weight:800;white-space:nowrap}
+.ri .d{font-size:.84rem;color:var(--ink2);margin-top:4px;line-height:1.45}
+.ri.falta{border-color:var(--x)}.ri.sobra{border-color:var(--am)}
+.dif{font-weight:800}.dif.x{color:var(--x)}.dif.am{color:var(--am)}.dif.ok{color:var(--pri2)}
+.tot{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.tot div{background:var(--card);border:1px solid var(--bord);border-radius:14px;padding:10px 12px}
+.tot small{display:block;font-size:.72rem;color:var(--ink3);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.tot b{font-size:1.4rem}
+.aviso{background:var(--am-bg);color:var(--am);border-radius:14px;padding:12px 14px;font-weight:700;margin-bottom:10px}
+.toast{position:fixed;left:16px;right:16px;bottom:calc(110px + env(safe-area-inset-bottom));background:#0f172a;color:#fff;padding:12px 14px;border-radius:14px;font-weight:700;z-index:40;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:.96}
+.vazio{text-align:center;color:var(--ink3);padding:20px 10px}
+.cfg-l{display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--bord)}
+.cfg-l .nm{flex:1;min-width:0;font-weight:700;font-size:.95rem}
+.cfg-l select,.cfg-l input{height:44px;border-radius:10px;border:2px solid var(--bord);background:var(--card);padding:0 8px;max-width:170px;font-size:.9rem;color:var(--ink)}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<section class="tela" id="login"><div class="corpo">
+  <div style="font-size:3rem">⚖️</div>
+  <h1>Pesagem CD</h1>
+  <div style="color:var(--ink3)">Grupo Botequim — digite o código de acesso</div>
+  <form onsubmit="entrar(event)">
+    <input id="login-c" inputmode="numeric" autocomplete="one-time-code" maxlength="12" aria-label="código de acesso">
+    <button class="btn" id="login-b">Entrar</button>
+    <div class="erro" id="login-e"></div>
+  </form>
+</div></section>
+
+<!-- ============ INÍCIO ============ -->
+<section class="tela" id="inicio">
+  <div class="topo"><h1>⚖️ Pesagem CD <div class="sub" id="ini-dia"></div></h1><span class="net" id="net1">● online</span></div>
+  <div class="corpo">
+    <div id="ini-abertos"></div>
+    <button class="btn" onclick="abrirNovo()" style="min-height:72px;font-size:1.25rem">＋ Novo recebimento</button>
+    <div class="kick">Últimos recebimentos</div>
+    <div id="ini-recentes"></div>
+    <div class="kick">Ajustes</div>
+    <button class="op" onclick="abrirConfig()"><span class="ic">📦</span><div><b>Caixas (tara) e itens</b><span>peso da caixa vazia, uma vez por tipo de caixa</span></div><span class="seta">›</span></button>
+    <div class="mini" style="text-align:center;margin-top:14px"><a href="#" onclick="sair();return false" style="color:var(--ink3)">sair deste aparelho</a></div>
+  </div>
+</section>
+
+<!-- ============ NOVO RECEBIMENTO ============ -->
+<section class="tela" id="novo">
+  <div class="topo"><button class="voltar" onclick="ir('inicio')" aria-label="voltar">‹</button><h1>Novo recebimento</h1></div>
+  <div class="corpo">
+    <div class="kick" style="margin-top:4px">Quem está pesando?</div>
+    <div class="chips" id="novo-pessoas"></div>
+    <div class="kick">De onde veio? (toque pra começar)</div>
+    <div id="novo-origens"></div>
+  </div>
+</section>
+
+<!-- ============ PESAR ============ -->
+<section class="tela" id="pesar">
+  <div class="topo" style="padding-top:max(8px,env(safe-area-inset-top));padding-bottom:8px">
+    <button class="voltar" onclick="sairPesar()" aria-label="voltar">‹</button>
+    <h1 id="ps-tit">—<div class="sub" id="ps-sub"></div></h1>
+    <span class="net" id="net2">●</span>
+  </div>
+  <div class="cam" id="cam">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="guia"><span>visor da balança + caixa na foto</span></div>
+    <div class="semcam" id="semcam" style="display:none"><div style="font-size:2.4rem">📷</div><div id="semcam-t">Câmera desligada</div><button class="btn sec" style="width:auto;min-height:48px;padding:0 18px" onclick="ligarCamera(true)">Ligar câmera</button></div>
+    <div class="flash" id="flash"></div>
+    <button class="res" id="res" style="display:none" onclick="abrirCaixa(ULTIMA)"></button>
+  </div>
+  <div class="itens" id="ps-itens"></div>
+  <div class="barra">
+    <button class="lado" onclick="abrirLista()"><b id="ps-n">0</b><span class="p" id="ps-kg">caixas</span></button>
+    <button class="tiro" id="tiro" onclick="pesar()" aria-label="tirar foto e pesar">📷<small>PESAR</small></button>
+    <button class="lado" onclick="abrirResumo()"><b>✓</b><span class="p">fechar</span></button>
+  </div>
+  <input type="file" id="arquivo" accept="image/*" capture="environment" style="display:none" onchange="fotoDoArquivo(this)">
+</section>
+
+<!-- ============ RESUMO ============ -->
+<section class="tela" id="resumo">
+  <div class="topo"><button class="voltar" onclick="ir('pesar')" aria-label="voltar">‹</button><h1>Resumo <div class="sub" id="rs-sub"></div></h1></div>
+  <div class="corpo" id="rs-corpo"></div>
+</section>
+
+<!-- ============ AJUSTES ============ -->
+<section class="tela" id="config">
+  <div class="topo"><button class="voltar" onclick="ir(VOLTA_CFG || 'inicio')" aria-label="voltar">‹</button><h1>Caixas e itens</h1></div>
+  <div class="corpo" id="cfg-corpo"></div>
+</section>
+
+<div class="veu" id="veu" onclick="fecharSheet()"></div>
+<div class="sheet" id="sheet"><div class="alca"></div><div id="sheet-c"></div></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="arq-tara" accept="image/*" capture="environment" style="display:none" onchange="taraDoArquivo(this)">
+
+<script>
+'use strict'
+const FN = 'https://kuyhkltbwlkvtgbabscv.supabase.co/functions/v1/pesagem'
+const $ = (s) => document.querySelector(s)
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v) } catch { return d } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
+const kg3 = (v) => v == null ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+const kg1 = (v) => v == null ? '—' : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+const brl = (v) => v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const dfmt = (d) => { if (!d) return ''; const p = d.split('-'); return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][new Date(d + 'T12:00:00').getDay()] + ' ' + p[2] + '/' + p[1] }
+const hojeLocal = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10)
+const rnd = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((x) => x.toString(16).padStart(2, '0')).join('')
+const vibra = (p) => { try { navigator.vibrate && navigator.vibrate(p) } catch {} }
+let AC = null
+function bip(tipo) { // som curto: ok = agudo, conferir = 2 graves
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)()
+    const t = AC.currentTime
+    const notas = tipo === 'ok' ? [[1320, 0, 0.09]] : tipo === 'clique' ? [[900, 0, 0.03]] : [[440, 0, 0.12], [440, 0.18, 0.12]]
+    for (const [f, d, du] of notas) { const o = AC.createOscillator(), g = AC.createGain(); o.frequency.value = f; g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.18, t + d + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d + du); o.connect(g).connect(AC.destination); o.start(t + d); o.stop(t + d + du + 0.02) }
+  } catch {}
+}
+let toastT = 0
+function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600) }
+
+// ======================================================= estado
+let SESS = LS.get('pes_sessao', '')
+let INI = LS.get('pes_inicio', null)            // itens, taras, pessoas, esperados, recebimentos
+let RECS_LOCAL = LS.get('pes_recs_local', {})   // recebimentos criados aqui (aparecem mesmo sem internet)
+let CXS_LOCAL = LS.get('pes_cxs_local', {})     // caixas por recebimento (sem a foto)
+let PESSOAS_SEL = LS.get('pes_pessoas', ['neide'])
+let REC = null, ITEM_SEL = null, ULTIMA = null, VOLTA_CFG = null, MOSTRAR_OUTROS = false
+const THUMBS = new Map()
+const salvarLocal = () => { LS.set('pes_recs_local', RECS_LOCAL); LS.set('pes_cxs_local', CXS_LOCAL) }
+const itemDe = (id) => (INI?.itens || []).find((i) => i.id === id) || null
+const nomeItem = (it) => it ? (it.rotulo || it.nome) : 'item?'
+const taraDe = (id) => (INI?.taras || []).find((t) => t.id === id) || null
+const fotoUrl = (arq) => `${FN}/foto/${encodeURIComponent(arq)}?s=${SESS}`
+
+// ======================================================= rede
+async function api(caminho, body) {
+  const o = { headers: { 'x-sessao': SESS } }
+  if (body !== undefined) { o.method = 'POST'; o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(body) }
+  let r
+  try { r = await fetch(FN + caminho, o) } catch { const e = new Error('sem internet'); e.rede = true; throw e }
+  const j = await r.json().catch(() => ({}))
+  if (r.status === 401) { telaLogin(j.erro); const e = new Error(j.erro || 'entre com o código'); e.auth = true; throw e }
+  if (!r.ok || j.erro) { const e = new Error(j.erro || 'HTTP ' + r.status); e.st = r.status; throw e }
+  return j
+}
+function telaLogin(msg) { ir('login'); $('#login-e').textContent = msg && !/entre com/.test(msg) ? msg : ''; setTimeout(() => $('#login-c').focus(), 60) }
+async function entrar(ev) {
+  ev.preventDefault()
+  const b = $('#login-b'); b.disabled = true; $('#login-e').textContent = ''
+  try {
+    const r = await fetch(FN + '/entrar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo: $('#login-c').value.trim() }) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok || !j.sessao) throw new Error(j.erro || 'não deu certo')
+    SESS = j.sessao; LS.set('pes_sessao', SESS); $('#login-c').value = ''
+    await carregarInicio(); ir('inicio'); bombear()
+  } catch (e) { $('#login-e').textContent = /fetch/i.test(e.message) ? 'sem internet' : e.message } finally { b.disabled = false }
+}
+function sair() { if (!confirm('Sair deste aparelho?')) return; LS.set('pes_sessao', ''); location.reload() }
+let ONLINE = navigator.onLine
+function marcarRede(on) { ONLINE = on; pintarRede() }
+function pintarRede() {
+  const n = FILA_N
+  for (const el of [$('#net1'), $('#net2')]) {
+    el.classList.toggle('off', !ONLINE || n > 0)
+    el.textContent = !ONLINE ? (n ? `● sem internet · ${n} na fila` : '● sem internet') : n ? `⇡ enviando ${n}` : '● online'
+  }
+}
+window.addEventListener('online', () => { marcarRede(true); bombear() })
+window.addEventListener('offline', () => marcarRede(false))
+
+// ======================================================= fila offline (IndexedDB)
+let DB = null
+function idb() {
+  if (DB) return Promise.resolve(DB)
+  return new Promise((ok, bad) => { const r = indexedDB.open('pesagem-cd', 1); r.onupgradeneeded = () => r.result.createObjectStore('fila', { keyPath: 'id' }); r.onsuccess = () => ok((DB = r.result)); r.onerror = () => bad(r.error) })
+}
+async function filaTudo() { const d = await idb(); return new Promise((ok) => { const r = d.transaction('fila').objectStore('fila').getAll(); r.onsuccess = () => ok(r.result.sort((a, b) => a.ord - b.ord)); r.onerror = () => ok([]) }) }
+async function filaPor(job) { const d = await idb(); return new Promise((ok, bad) => { const t = d.transaction('fila', 'readwrite'); t.objectStore('fila').put(job); t.oncomplete = ok; t.onerror = () => bad(t.error) }) }
+async function filaTira(id) { const d = await idb(); return new Promise((ok) => { const t = d.transaction('fila', 'readwrite'); t.objectStore('fila').delete(id); t.oncomplete = ok; t.onerror = ok }) }
+let FILA_N = 0, ORD = Date.now(), EM_VOO = new Set(), ESPERA_ATE = 0, BOMBA_T = 0
+async function enfileirar(tipo, payload, extra = {}) {
+  const job = { id: tipo + ':' + (payload.id || rnd(6)) + ':' + (++ORD), ord: ORD, tipo, payload, tent: 0, ...extra }
+  await filaPor(job); FILA_N++; pintarRede(); bombear()
+}
+async function bombear() {
+  clearTimeout(BOMBA_T)
+  if (!SESS) return
+  if (Date.now() < ESPERA_ATE) { BOMBA_T = setTimeout(bombear, ESPERA_ATE - Date.now() + 50); return }
+  const fila = await filaTudo()
+  FILA_N = fila.length; pintarRede()
+  const pendCx = new Set(fila.filter((j) => j.tipo === 'caixa').map((j) => j.payload.id))
+  const pendRec = new Set(fila.filter((j) => j.tipo === 'caixa' || j.tipo === 'editar' || j.tipo === 'reler').map((j) => j.rec))
+  for (const j of fila) {
+    if (EM_VOO.size >= 3) break
+    if (EM_VOO.has(j.id)) continue
+    if ((j.tipo === 'editar' || j.tipo === 'reler') && pendCx.has(j.payload.id)) continue      // espera a caixa subir
+    if (j.tipo === 'fechar' && pendRec.has(j.payload.id)) continue                            // espera todas as caixas
+    if (j.tipo === 'caixa' && fila.some((x) => (x.tipo === 'item' || x.tipo === 'tara') && x.ord < j.ord)) continue // tara nova primeiro
+    if (j.depois && j.depois > Date.now()) continue
+    EM_VOO.add(j.id)
+    rodarJob(j).finally(() => { EM_VOO.delete(j.id); setTimeout(bombear, 30) })
+  }
+  if (fila.some((j) => j.depois && j.depois > Date.now())) BOMBA_T = setTimeout(bombear, 3000)
+}
+async function rodarJob(j) {
+  try {
+    const p = j.payload
+    let r
+    if (j.tipo === 'receb') r = await api('/receb', p)
+    else if (j.tipo === 'caixa') r = await api('/caixa', p)
+    else if (j.tipo === 'editar') r = await api('/caixa/' + p.id, p.campos)
+    else if (j.tipo === 'reler') r = await api('/caixa/' + p.id + '/reler', {})
+    else if (j.tipo === 'fechar') r = await api('/receb/' + p.id + '/fechar', {})
+    else if (j.tipo === 'item') r = await api('/itens', p)
+    else if (j.tipo === 'tara') r = await api('/taras', p)
+    await filaTira(j.id); FILA_N = Math.max(0, FILA_N - 1)
+    marcarRede(true)
+    depoisDoJob(j, r)
+  } catch (e) {
+    if (e.rede) { marcarRede(false); ESPERA_ATE = Date.now() + 4000; return }
+    if (e.auth) { ESPERA_ATE = Date.now() + 5000; return }
+    j.tent = (j.tent || 0) + 1
+    if ((e.st && e.st >= 400 && e.st < 500 && e.st !== 429) || j.tent > 8) { // erro de verdade: tira da fila e avisa
+      await filaTira(j.id); FILA_N = Math.max(0, FILA_N - 1)
+      if (j.tipo === 'caixa') atualizarCaixa(j.rec, { id: j.payload.id, status: 'erro', erro: e.message })
+      toast('não deu: ' + e.message)
+    } else { j.depois = Date.now() + Math.min(60000, 2000 * 2 ** j.tent); await filaPor(j) }
+  }
+  pintarRede()
+}
+function depoisDoJob(j, r) {
+  if (j.tipo === 'caixa' || j.tipo === 'editar' || j.tipo === 'reler') {
+    const c = r.caixa
+    atualizarCaixa(c.recebimento_id, c)
+    if (j.tipo === 'caixa' && c.status === 'sem_leitura' && /ocupada|não respondeu/i.test(c.ia?.erro || '') && !(j.relida)) enfileirar('reler', { id: c.id }, { rec: c.recebimento_id, depois: Date.now() + 4000, relida: true })
+  }
+  if (j.tipo === 'fechar') { const rec = RECS_LOCAL[j.payload.id]; if (rec) { rec.status = 'fechado'; salvarLocal() } carregarInicio().catch(() => {}) }
+  if (j.tipo === 'item' && r.item) { const i = (INI.itens || []).findIndex((x) => x.id === r.item.id); if (i >= 0) INI.itens[i] = r.item; else INI.itens.push(r.item); LS.set('pes_inicio', INI) }
+  if (j.tipo === 'tara' && r.tara) { const i = (INI.taras || []).findIndex((x) => x.id === r.tara.id); if (i >= 0) INI.taras[i] = r.tara; else INI.taras.push(r.tara); LS.set('pes_inicio', INI) }
+}
+
+// ======================================================= início
+function ir(id) {
+  document.querySelectorAll('.tela').forEach((t) => t.classList.toggle('on', t.id === id))
+  if (id === 'pesar') ligarCamera(); else desligarCamera()
+  window.scrollTo(0, 0)
+}
+async function carregarInicio() {
+  const j = await api('/inicio?dias=4')
+  INI = j; LS.set('pes_inicio', INI)
+  for (const r of j.recebimentos) if (RECS_LOCAL[r.id]) { Object.assign(RECS_LOCAL[r.id], { status: r.status, notas: r.notas, fornecedor: r.fornecedor }) }
+  // limpa recebimento local velho (> 4 dias) que já está no servidor
+  for (const [id, r] of Object.entries(RECS_LOCAL)) if (r.dia < addDia(hojeLocal(), -4) && j.recebimentos.every((x) => x.id !== id)) { delete RECS_LOCAL[id]; delete CXS_LOCAL[id] }
+  salvarLocal()
+  pintarInicio()
+}
+const addDia = (iso, n) => new Date(Date.parse(iso + 'T12:00:00Z') + n * 86400e3).toISOString().slice(0, 10)
+function todosRecs() {
+  const m = new Map()
+  for (const r of INI?.recebimentos || []) m.set(r.id, { ...r })
+  for (const r of Object.values(RECS_LOCAL)) { const s = m.get(r.id); m.set(r.id, { ...(s || {}), ...r, status: s?.status === 'fechado' || r.status === 'fechado' ? 'fechado' : r.status || 'aberto' }) }
+  for (const r of m.values()) { const cx = (CXS_LOCAL[r.id] || []).filter((c) => !c.apagado); if (cx.length || r.n_caixas == null) { r.n_caixas = cx.length; r.kg = cx.reduce((s, c) => s + (c.kg_liquido || 0), 0) } }
+  return [...m.values()].sort((a, b) => (b.criado_em || 0) - (a.criado_em || 0))
+}
+function pintarInicio() {
+  $('#ini-dia').textContent = dfmt(hojeLocal()) + (INI && !INI.ia ? ' · IA desligada' : '')
+  const recs = todosRecs()
+  const abertos = recs.filter((r) => r.status !== 'fechado')
+  $('#ini-abertos').innerHTML = abertos.length ? '<div class="kick" style="margin-top:4px">Continuar pesando</div>' + abertos.map((r) =>
+    `<button class="op" style="border-color:var(--pri)" onclick="abrirRec('${r.id}')"><span class="ic">⚖️</span><div><b>${esc(r.fornecedor ? curto(r.fornecedor) : 'Sem nota ainda')}</b><span>${dfmt(r.dia)} · ${r.n_caixas || 0} caixas · ${kg1(r.kg)} kg</span></div><span class="seta">›</span></button>`).join('') + '<div style="height:6px"></div>' : ''
+  const fech = recs.filter((r) => r.status === 'fechado').slice(0, 8)
+  $('#ini-recentes').innerHTML = fech.length ? fech.map((r) =>
+    `<button class="op" onclick="abrirRec('${r.id}', true)"><span class="ic">✅</span><div><b>${esc(r.fornecedor ? curto(r.fornecedor) : 'Sem nota ainda')}</b><span>${dfmt(r.dia)} · ${r.n_caixas || 0} caixas · ${kg1(r.kg)} kg</span></div><span class="seta">›</span></button>`).join('') : '<div class="vazio">Nenhum recebimento fechado ainda.</div>'
+}
+
+// ======================================================= novo recebimento
+function abrirNovo() {
+  const ps = INI?.pessoas || []
+  $('#novo-pessoas').innerHTML = ps.map((p) => `<button class="chip ${PESSOAS_SEL.includes(p.id) ? 'on' : ''}" onclick="togPessoa('${p.id}', this)">${esc(p.apelido || p.nome)}</button>`).join('') || '<span class="mini">—</span>'
+  const hoje = hojeLocal()
+  const esp = (INI?.esperados || []).slice().sort((a, b) => (b.dia || '').localeCompare(a.dia || '') || (a.tipo === 'pedido' ? -1 : 1))
+  const usadas = new Set(todosRecs().filter((r) => r.dia >= addDia(hoje, -3)).map((r) => r.esperado_id).filter(Boolean))
+  const op = (e) => {
+    const n = (e.linhas || []).filter((l) => l.item).length
+    const ic = e.tipo === 'pedido' ? '🛒' : '🧾'
+    const t = e.tipo === 'pedido' ? `Pedido Ceagesp · ${dfmt(e.dia)}` : esc(curto(e.fornecedor))
+    const s = e.tipo === 'pedido' ? `${n} itens pedidos pelas casas` : `NF ${esc(e.nnf || '')} · ${dfmt(e.dia)} · ${n} itens`
+    return `<button class="op" onclick="novoRec('${e.id}')"><span class="ic">${ic}</span><div><b>${t}</b><span>${s}${usadas.has(e.id) ? ' · <b style="display:inline;color:var(--am)">já tem recebimento</b>' : ''}</span></div><span class="seta">›</span></button>`
+  }
+  const recentes = esp.filter((e) => e.dia >= addDia(hoje, -1)), velhas = esp.filter((e) => e.dia < addDia(hoje, -1))
+  $('#novo-origens').innerHTML = recentes.map(op).join('') +
+    `<button class="op" onclick="novoRec(null)"><span class="ic">❓</span><div><b>Sem nota ainda</b><span>pesa agora — a nota liga sozinha quando chegar</span></div><span class="seta">›</span></button>` +
+    (velhas.length ? `<div class="kick">Notas dos últimos dias</div>` + velhas.map(op).join('') : '')
+  ir('novo')
+}
+const curto = (s) => String(s || '').replace(/\b(COMERCIO|COMERCIAL|DISTRIBUIDORA|DISTRIB\w*|E|DE|DO|DA|LTDA|EIRELI|ME|EPP|S\/A|HORTIFRUTI\w*)\b\.?/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 30) || s
+function togPessoa(id, el) { PESSOAS_SEL = PESSOAS_SEL.includes(id) ? PESSOAS_SEL.filter((x) => x !== id) : [...PESSOAS_SEL, id]; LS.set('pes_pessoas', PESSOAS_SEL); el.classList.toggle('on') }
+async function novoRec(espId) {
+  const e = (INI?.esperados || []).find((x) => x.id === espId)
+  const id = 'rec-' + hojeLocal().replace(/-/g, '') + '-' + rnd(4)
+  const rec = { id, dia: hojeLocal(), fornecedor: e ? (e.tipo === 'pedido' ? 'Ceagesp' : e.fornecedor) : null, esperado_id: espId || null, notas: e && e.tipo === 'nota' && e.chave ? [e.chave] : [], pessoas: PESSOAS_SEL.slice(), status: 'aberto', criado_em: Date.now() }
+  RECS_LOCAL[id] = rec; CXS_LOCAL[id] = []; salvarLocal()
+  await enfileirar('receb', { id, dia: rec.dia, fornecedor: rec.fornecedor, esperado_id: rec.esperado_id, pessoas: rec.pessoas, criado_em: rec.criado_em }, { rec: id })
+  ITEM_SEL = null; ULTIMA = null; MOSTRAR_OUTROS = false
+  abrirRec(id)
+}
+async function abrirRec(id, resumo) {
+  const r = todosRecs().find((x) => x.id === id)
+  if (!r) return
+  REC = RECS_LOCAL[id] || (RECS_LOCAL[id] = { id: r.id, dia: r.dia, fornecedor: r.fornecedor, esperado_id: r.esperado_id, notas: r.notas || [], pessoas: r.pessoas || [], status: r.status, criado_em: r.criado_em })
+  if (!CXS_LOCAL[id]) CXS_LOCAL[id] = []
+  salvarLocal()
+  ITEM_SEL = LS.get('pes_item_' + id, null); ULTIMA = null
+  if (resumo || REC.status === 'fechado') abrirResumo(); else { pintarPesar(); ir('pesar') }
+  try { // puxa do servidor o que já subiu (outro aparelho / recarregou a página)
+    const j = await api('/receb/' + id)
+    Object.assign(REC, { status: j.rec.status, notas: j.rec.notas, fornecedor: j.rec.fornecedor })
+    const loc = CXS_LOCAL[id]
+    for (const c of j.caixas) { const i = loc.findIndex((x) => x.id === c.id); if (i >= 0) loc[i] = { ...loc[i], ...c, local: false }; else loc.push(c) }
+    salvarLocal(); RESUMO[id] = j.resumo
+    if ($('#pesar').classList.contains('on')) pintarPesar()
+    if ($('#resumo').classList.contains('on')) pintarResumo()
+  } catch {}
+}
+const RESUMO = {}
+
+// ======================================================= pesar
+function esperadoDoRec(rec) {
+  const out = new Map()
+  const es = (INI?.esperados || []).filter((e) => e.id === rec.esperado_id || (e.chave && (rec.notas || []).includes(e.chave)))
+  const temNota = es.some((e) => e.tipo === 'nota')
+  for (const e of es) {
+    if (temNota && e.tipo === 'pedido') continue // nota > pedido
+    for (const l of e.linhas || []) { if (!l.item) continue; const a = out.get(l.item) || { qtd: 0, unid: l.unid }; a.qtd += Number(l.qtd) || 0; out.set(l.item, a) }
+  }
+  return out
+}
+function contagem(recId) {
+  const m = new Map()
+  for (const c of CXS_LOCAL[recId] || []) { if (c.apagado || c.status === 'erro') continue; const k = c.item_id || '?'; const a = m.get(k) || { n: 0, kg: 0 }; a.n++; a.kg += c.kg_liquido || 0; m.set(k, a) }
+  return m
+}
+function pintarPesar() {
+  if (!REC) return
+  $('#ps-tit').firstChild.textContent = REC.fornecedor ? curto(REC.fornecedor) : 'Sem nota ainda'
+  const cx = (CXS_LOCAL[REC.id] || []).filter((c) => !c.apagado && c.status !== 'erro')
+  const tot = cx.reduce((s, c) => s + (c.kg_liquido || 0), 0)
+  $('#ps-sub').textContent = dfmt(REC.dia) + (REC.pessoas?.length ? ' · ' + REC.pessoas.map((p) => (INI?.pessoas || []).find((x) => x.id === p)?.apelido || p).join(', ') : '')
+  $('#ps-n').textContent = cx.length
+  $('#ps-kg').textContent = (cx.length === 1 ? 'caixa · ' : 'caixas · ') + kg1(tot) + ' kg'
+  const esp = esperadoDoRec(REC), cont = contagem(REC.id)
+  const itens = INI?.itens || []
+  const tile = (it) => {
+    const e = esp.get(it.id), c = cont.get(it.id)
+    const n = c ? c.n : 0
+    const cc = e ? `${n}/${String(Math.round(e.qtd * 10) / 10).replace('.', ',')} ${e.unid === 'saco' || e.unid === 'sac' ? 'sc' : 'cx'}` : n ? `${n} cx` : ''
+    return `<button class="it ${ITEM_SEL === it.id ? 'on' : ''} ${e && n === e.qtd ? 'feito' : ''} ${e && n > e.qtd ? 'passou' : ''}" onclick="selItem('${it.id}')"><span class="e">${it.emoji || '📦'}</span><span class="n">${esc(nomeItem(it))}</span><span class="c">${cc || '&nbsp;'}</span></button>`
+  }
+  const nAuto = cont.get('?')
+  const auto = `<button class="it auto ${ITEM_SEL ? '' : 'on'}" onclick="selItem(null)"><span class="e">🤖</span><span class="n">IA escolhe</span><span class="c">${nAuto ? nAuto.n + ' sem item' : '&nbsp;'}</span></button>`
+  const doRec = itens.filter((i) => esp.has(i.id) || cont.has(i.id))
+  const outros = itens.filter((i) => !esp.has(i.id) && !cont.has(i.id))
+  const sel = itemDe(ITEM_SEL)
+  const taraTxt = sel ? (taraDe(sel.tara_id) ? `caixa: ${esc(taraDe(sel.tara_id).nome)} −${kg3(taraDe(sel.tara_id).kg)} kg` : 'sem tara cadastrada') : ''
+  let h = `<div class="kick" style="display:flex;justify-content:space-between;gap:8px"><span>${sel ? 'Pesando: ' + esc(nomeItem(sel)) : 'Toque no item (ou deixe a IA)'}</span>${sel ? `<a href="#" onclick="abrirTaraItem('${sel.id}');return false" style="color:var(--az);text-transform:none;letter-spacing:0">${taraTxt} ›</a>` : ''}</div>`
+  if (doRec.length) {
+    h += `<div class="grade">${auto}${doRec.map(tile).join('')}</div>`
+    h += MOSTRAR_OUTROS ? `<div class="kick">Outros itens</div><div class="grade">${outros.map(tile).join('')}</div>` : `<button class="mais" onclick="MOSTRAR_OUTROS=true;pintarPesar()">＋ outros itens (${outros.length})</button>`
+  } else h += `<div class="grade">${auto}${outros.map(tile).join('')}</div>`
+  $('#ps-itens').innerHTML = h
+  pintarResultado()
+}
+function selItem(id) { ITEM_SEL = id; LS.set('pes_item_' + REC.id, id); bip('clique'); pintarPesar() }
+function pintarResultado() {
+  const el = $('#res')
+  const c = (CXS_LOCAL[REC?.id] || []).find((x) => x.id === ULTIMA)
+  if (!c) { el.style.display = 'none'; return }
+  el.style.display = 'flex'
+  const it = itemDe(c.item_id)
+  if (c.local && c.status === 'enviando') {
+    el.className = 'res'
+    el.innerHTML = `${ONLINE ? '<div class="spin"></div>' : '<span class="ic">📥</span>'}<div class="tx"><div class="l1">${ONLINE ? 'lendo o visor…' : 'guardada — sem internet'}</div><div class="l2">${it ? esc(nomeItem(it)) + ' · ' : ''}${ONLINE ? 'pode pôr a próxima caixa' : 'sobe sozinha quando voltar'}</div></div>`
+    return
+  }
+  if (c.status === 'erro') { el.className = 'res x'; el.innerHTML = `<span class="ic">⚠️</span><div class="tx"><div class="l1">não enviou</div><div class="l2">${esc(c.erro || '')}</div></div><span class="fix">ver</span>`; return }
+  const avis = (c.ia?.avisos || []).join(' · ')
+  const ok = c.status === 'ok' || c.status === 'manual'
+  el.className = 'res ' + (ok ? 'ok' : c.status === 'sem_leitura' ? 'x' : 'am')
+  const l1 = `<span class="nm">${it ? `${it.emoji || ''} ${esc(nomeItem(it))}` : '❓ qual item?'}</span><span class="kgv">${c.kg_liquido != null ? kg3(c.kg_liquido) + ' kg' : 'peso?'}${ok ? ' ✓' : ''}</span>`
+  const l2 = c.kg_bruto != null && c.tara_kg ? `visor ${kg3(c.kg_bruto)} − caixa ${kg3(c.tara_kg)}${avis ? ' · ' + esc(avis) : ''}` : esc(avis || (c.kg_bruto != null ? 'sem tara descontada' : 'toque pra digitar o peso'))
+  el.innerHTML = `<span class="ic">${ok ? '✅' : c.status === 'sem_leitura' ? '⛔' : '⚠️'}</span><div class="tx"><div class="l1">${l1}</div><div class="l2">${l2}</div></div><span class="fix">${ok ? 'corrigir' : 'conferir'}</span>`
+}
+function atualizarCaixa(recId, c) {
+  const loc = CXS_LOCAL[recId] || (CXS_LOCAL[recId] = [])
+  const i = loc.findIndex((x) => x.id === c.id)
+  const novo = { ...(i >= 0 ? loc[i] : {}), ...c, local: c.status === 'erro' ? true : false }
+  if (i >= 0) loc[i] = novo; else loc.push(novo)
+  salvarLocal()
+  if (REC && REC.id === recId) {
+    if (c.id === ULTIMA && c.status) { const ok = c.status === 'ok' || c.status === 'manual'; bip(ok ? 'ok' : 'confere'); vibra(ok ? 40 : [80, 60, 80]) }
+    if ($('#pesar').classList.contains('on')) pintarPesar()
+    if ($('#sheet').classList.contains('on') && SHEET_CX === c.id) abrirCaixa(c.id)
+    if ($('#sheet').classList.contains('on') && SHEET_LISTA) abrirLista()
+  }
+}
+
+// --- câmera
+let STREAM = null, CAM_ERRO = null
+async function ligarCamera(forcar) {
+  if (STREAM && STREAM.active) return
+  const v = $('#video')
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('sem câmera ao vivo neste navegador')
+    STREAM = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
+    v.srcObject = STREAM; await v.play().catch(() => {})
+    $('#semcam').style.display = 'none'; CAM_ERRO = null
+  } catch (e) {
+    CAM_ERRO = e.message || 'câmera bloqueada'
+    $('#semcam').style.display = 'flex'
+    $('#semcam-t').textContent = 'Sem câmera ao vivo (' + CAM_ERRO + ') — o botão PESAR abre a câmera do celular.'
+  }
+}
+function desligarCamera() { if (STREAM) { STREAM.getTracks().forEach((t) => t.stop()); STREAM = null } }
+document.addEventListener('visibilitychange', () => { if (document.hidden) desligarCamera(); else if ($('#pesar').classList.contains('on')) ligarCamera() })
+function reduzir(fonte, w, h, max, q) {
+  const k = Math.min(1, max / Math.max(w, h))
+  const c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k)
+  c.getContext('2d').drawImage(fonte, 0, 0, c.width, c.height)
+  return c.toDataURL('image/jpeg', q)
+}
+let ULT_TIRO = 0
+async function pesar() {
+  if (!REC) return
+  const t = Date.now(); if (t - ULT_TIRO < 650) return; ULT_TIRO = t
+  const v = $('#video')
+  if (!STREAM || !v.videoWidth) { $('#arquivo').click(); return }
+  const fl = $('#flash'); fl.classList.add('on'); setTimeout(() => fl.classList.remove('on'), 60)
+  vibra(25)
+  const img = reduzir(v, v.videoWidth, v.videoHeight, 1280, 0.72)
+  const thumb = reduzir(v, v.videoWidth, v.videoHeight, 260, 0.6)
+  registrarCaixa(img, thumb)
+}
+async function fotoDoArquivo(inp) {
+  const f = inp.files && inp.files[0]; inp.value = ''
+  if (!f) return
+  const bmp = await createImageBitmap(f).catch(() => null)
+  if (!bmp) return toast('não abriu a foto')
+  registrarCaixa(reduzir(bmp, bmp.width, bmp.height, 1280, 0.72), reduzir(bmp, bmp.width, bmp.height, 260, 0.6))
+}
+async function registrarCaixa(img, thumb) {
+  const id = 'cx' + Date.now().toString(36) + rnd(3)
+  THUMBS.set(id, thumb)
+  const c = { id, recebimento_id: REC.id, item_id: ITEM_SEL, local: true, status: 'enviando', thumb, criado_em: Date.now() }
+  CXS_LOCAL[REC.id].push(c); ULTIMA = id; salvarLocal()
+  pintarPesar()
+  await enfileirar('caixa', { id, recebimento_id: REC.id, imagem: img, item_id: ITEM_SEL, criado_em: c.criado_em,
+    receb: { dia: REC.dia, fornecedor: REC.fornecedor, esperado_id: REC.esperado_id, pessoas: REC.pessoas, criado_em: REC.criado_em } }, { rec: REC.id })
+}
+function sairPesar() { ir('inicio'); pintarInicio() }
+
+// ======================================================= sheet: corrigir uma caixa / lista
+let SHEET_CX = null, SHEET_LISTA = false, SHEET_TODOS = false
+function abrirSheet(html) { $('#sheet-c').innerHTML = html; $('#veu').classList.add('on'); $('#sheet').classList.add('on') }
+function fecharSheet() { $('#veu').classList.remove('on'); $('#sheet').classList.remove('on'); SHEET_CX = null; SHEET_LISTA = false; SHEET_TODOS = false }
+function imgDe(c) { return c.thumb || THUMBS.get(c.id) || (c.foto ? fotoUrl(c.foto) : '') }
+function abrirCaixa(id) {
+  const c = (CXS_LOCAL[REC?.id] || []).find((x) => x.id === id)
+  if (!c) return
+  SHEET_CX = id; SHEET_LISTA = false
+  const it = itemDe(c.item_id)
+  const pend = c.local && c.status === 'enviando'
+  const esp = esperadoDoRec(REC)
+  const daNota = (INI?.itens || []).filter((i) => esp.has(i.id) || i.id === c.item_id)
+  const lista = daNota.length >= 2 && !SHEET_TODOS ? daNota : (INI?.itens || []).slice().sort((a, b) => (esp.has(b.id) ? 1 : 0) - (esp.has(a.id) ? 1 : 0))
+  const faltam = (INI?.itens || []).length - lista.length
+  const tId = c.tara_id || it?.tara_id
+  const avis = (c.ia?.avisos || [])
+  abrirSheet(`<h2>${it ? (it.emoji || '') + ' ' + esc(nomeItem(it)) : '❓ Qual item?'}</h2>
+    ${c.foto ? `<img class="foto-g" src="${fotoUrl(c.foto)}" alt="foto da balança" onerror="this.src='${esc(c.thumb || '')}'">` : imgDe(c) ? `<img class="foto-g" src="${esc(imgDe(c))}" alt="foto da balança">` : ''}
+    ${pend ? '<div class="aviso" style="margin-top:10px">Ainda enviando — dá pra corrigir quando subir.</div>' : ''}
+    ${avis.length ? `<div class="aviso" style="margin-top:10px">${avis.map(esc).join('<br>')}</div>` : ''}
+    <div class="mini" style="margin-top:10px">Peso que aparece no visor${c.ia?.visor ? ` (a IA leu “${esc(c.ia.visor)}”)` : ''}</div>
+    <div class="peso-in"><input id="cx-kg" inputmode="decimal" value="${c.kg_bruto != null ? String(c.kg_bruto).replace('.', ',') : ''}" placeholder="0,000" ${pend ? 'disabled' : ''}><span>kg</span></div>
+    <div class="mini">Caixa (tara): ${tId && taraDe(tId) ? esc(taraDe(tId).nome) + ' −' + kg3(taraDe(tId).kg) + ' kg' : 'sem tara'} · líquido <b>${kg3(c.kg_liquido)} kg</b></div>
+    <button class="btn" style="margin-top:12px" ${pend ? 'disabled' : ''} onclick="salvarPeso('${c.id}')">✓ Está certo</button>
+    <div class="kick">Item errado? Toque no certo</div>
+    <div class="grade">${lista.map((i) => `<button class="it ${i.id === c.item_id ? 'on' : ''}" ${pend ? 'disabled' : ''} onclick="corrigir('${c.id}',{item_id:'${i.id}'})"><span class="e">${i.emoji || '📦'}</span><span class="n">${esc(nomeItem(i))}</span><span class="c">${esp.has(i.id) ? 'na nota' : '&nbsp;'}</span></button>`).join('')}</div>
+    ${faltam > 0 ? `<button class="mais" onclick="SHEET_TODOS=true;abrirCaixa('${c.id}')">＋ outros itens (${faltam})</button>` : ''}
+    <div style="display:grid;gap:10px;margin-top:14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button class="btn sec" ${pend || !c.foto ? 'disabled' : ''} onclick="reler('${c.id}')">↻ Ler de novo</button>
+        <button class="btn x" onclick="apagarCaixa('${c.id}')">🗑️ Apagar</button>
+      </div>
+    </div>`)
+}
+function salvarPeso(id) {
+  const c = (CXS_LOCAL[REC.id] || []).find((x) => x.id === id)
+  const v = $('#cx-kg').value.trim().replace(/\s/g, '').replace(',', '.')
+  const n = Number(v)
+  if (v === '' || !isFinite(n) || n < 0 || n > 500) return toast('digite o peso do visor (ex.: 12,450)')
+  const campos = { kg_bruto: Math.round(n * 1000) / 1000, item_id: c.item_id }
+  if (!c.item_id) return toast('escolha o item')
+  corrigir(id, campos, true)
+}
+function corrigir(id, campos, fechar) {
+  const c = (CXS_LOCAL[REC.id] || []).find((x) => x.id === id)
+  if (!c) return
+  // mostra na hora; o servidor confirma depois
+  if (campos.item_id !== undefined) c.item_id = campos.item_id
+  if (campos.kg_bruto !== undefined) { c.kg_bruto = campos.kg_bruto }
+  const it = itemDe(c.item_id), t = taraDe(c.tara_id || it?.tara_id)
+  c.tara_kg = t ? Number(t.kg) : 0
+  if (c.kg_bruto != null) c.kg_liquido = Math.max(0, Math.round((c.kg_bruto - c.tara_kg) * 1000) / 1000)
+  c.status = c.item_id && c.kg_bruto != null ? 'manual' : c.status
+  if (c.ia) c.ia.avisos = []
+  salvarLocal(); bip('ok')
+  enfileirar('editar', { id, campos }, { rec: REC.id })
+  if (fechar) fecharSheet(); else abrirCaixa(id)
+  pintarPesar()
+}
+function reler(id) { const c = (CXS_LOCAL[REC.id] || []).find((x) => x.id === id); if (c) { c.status = 'enviando'; c.local = true; ULTIMA = id; salvarLocal() } enfileirar('reler', { id }, { rec: REC.id }); fecharSheet(); pintarPesar() }
+function apagarCaixa(id) {
+  const c = (CXS_LOCAL[REC.id] || []).find((x) => x.id === id)
+  if (!c || !confirm('Apagar esta caixa?')) return
+  c.apagado = 1; salvarLocal()
+  if (!(c.local && c.status === 'enviando') && c.status !== 'erro') enfileirar('editar', { id, campos: { apagar: 1 } }, { rec: REC.id })
+  else filaTudo().then((f) => { for (const j of f) if (j.tipo === 'caixa' && j.payload.id === id) filaTira(j.id).then(() => { FILA_N--; pintarRede() }) })
+  if (ULTIMA === id) ULTIMA = null
+  fecharSheet(); pintarPesar(); toast('caixa apagada')
+}
+function abrirLista() {
+  SHEET_LISTA = true; SHEET_CX = null
+  const cx = (CXS_LOCAL[REC.id] || []).filter((c) => !c.apagado).slice().reverse()
+  abrirSheet(`<h2>${cx.length} caixas · ${kg1(cx.reduce((s, c) => s + (c.kg_liquido || 0), 0))} kg</h2>` + (cx.length ? cx.map((c) => {
+    const it = itemDe(c.item_id)
+    const st = c.local && c.status === 'enviando' ? '<span class="tag az">enviando</span>' : c.status === 'ok' ? '<span class="tag ok">ok</span>' : c.status === 'manual' ? '<span class="tag ok">corrigido</span>' : c.status === 'erro' ? '<span class="tag x">erro</span>' : c.status === 'sem_leitura' ? '<span class="tag x">sem peso</span>' : '<span class="tag am">conferir</span>'
+    return `<button class="lin" onclick="abrirCaixa('${c.id}')"><img src="${esc(imgDe(c))}" alt="" loading="lazy"><div class="tx"><b>${it ? (it.emoji || '') + ' ' + esc(nomeItem(it)) : '❓ sem item'}</b><span class="mini">${new Date(c.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} ${st}</span></div><span class="kg">${c.kg_liquido != null ? kg3(c.kg_liquido) : '—'}</span></button>`
+  }).join('') : '<div class="vazio">Nenhuma caixa ainda. Põe a caixa na balança e toca em PESAR.</div>'))
+}
+
+// ======================================================= resumo / fechar
+function resumoLocal(recId) {
+  const cont = new Map(), esp = esperadoDoRec(RECS_LOCAL[recId] || REC)
+  for (const c of CXS_LOCAL[recId] || []) { if (c.apagado || c.status === 'erro') continue; const k = c.item_id || '?'; const a = cont.get(k) || { caixas: 0, kg: 0, sem_leitura: 0, confere: 0 }; a.caixas++; if (c.kg_liquido == null) a.sem_leitura++; else a.kg += c.kg_liquido; if (c.status === 'confere' || c.status === 'sem_leitura') a.confere++; cont.set(k, a) }
+  const linhas = []
+  for (const [id, a] of cont) { const it = itemDe(id); const e = esp.get(id); const lidas = a.caixas - a.sem_leitura; linhas.push({ item_id: id, nome: it ? nomeItem(it) : 'item não marcado', emoji: it?.emoji, ...a, kg_por_caixa: lidas ? a.kg / lidas : null, esperado_caixas: e ? e.qtd : null, dif_caixas: e ? a.caixas - e.qtd : null }) }
+  for (const [id, e] of esp) if (!cont.has(id)) { const it = itemDe(id); linhas.push({ item_id: id, nome: it ? nomeItem(it) : id, emoji: it?.emoji, caixas: 0, kg: 0, sem_leitura: 0, confere: 0, esperado_caixas: e.qtd, dif_caixas: -e.qtd }) }
+  return { linhas, local: true }
+}
+async function abrirResumo() {
+  pintarResumo(); ir('resumo')
+  try { const j = await api('/receb/' + REC.id); RESUMO[REC.id] = j.resumo; Object.assign(REC, { status: j.rec.status, notas: j.rec.notas }); pintarResumo() } catch {}
+}
+function pintarResumo() {
+  const cx = (CXS_LOCAL[REC.id] || []).filter((c) => !c.apagado && c.status !== 'erro')
+  const pend = cx.filter((c) => c.local && c.status === 'enviando').length
+  // resumo do servidor só vale se ele já tem todas as caixas daqui
+  const srv = RESUMO[REC.id]
+  const R = srv && !pend && srv.total.caixas === cx.length ? srv : resumoLocal(REC.id)
+  // itens pedidos/na nota que ainda não foram pesados aparecem no fim
+  const tot = cx.reduce((s, c) => s + (c.kg_liquido || 0), 0)
+  const confere = cx.filter((c) => c.status === 'confere' || c.status === 'sem_leitura').length
+  $('#rs-sub').textContent = (REC.fornecedor ? curto(REC.fornecedor) : 'Sem nota ainda') + ' · ' + dfmt(REC.dia)
+  const dif = (v, suf, inv) => v == null ? '' : Math.abs(v) < 0.0005 ? `<span class="dif ok">bateu ✓</span>` : `<span class="dif ${v < 0 ? 'x' : 'am'}">${v < 0 ? 'faltou' : 'sobrou'} ${String(Math.round(Math.abs(v) * 1000) / 1000).replace('.', ',')}${suf}</span>`
+  const lin = R.linhas.slice().sort((a, b) => (b.caixas ? 1 : 0) - (a.caixas ? 1 : 0)).map((l) => {
+    const falta = (l.dif_caixas != null && l.dif_caixas < 0) || (l.dif_kg != null && l.dif_kg < -0.0005)
+    const sobra = !falta && ((l.dif_caixas != null && l.dif_caixas > 0) || (l.dif_kg != null && l.dif_kg > 0.0005))
+    const ds = []
+    if (l.caixas) ds.push(`${l.caixas} cx · ${kg3(l.kg_por_caixa)} kg por caixa${l.sem_leitura ? ` · <b style="color:var(--x)">${l.sem_leitura} sem peso</b>` : ''}`)
+    else ds.push('<b style="color:var(--x)">não pesado</b>')
+    if (l.esperado_caixas != null) ds.push(`${l.nota ? 'nota' : 'pedido'}: ${String(l.esperado_caixas).replace('.', ',')} cx → ${dif(l.dif_caixas, ' cx')}`)
+    if (l.esperado_kg != null) ds.push(`${esc(l.esperado_kg_fonte || 'esperado')}: ${kg3(l.esperado_kg)} kg → ${dif(l.dif_kg, ' kg')}`)
+    if (l.custo_kg != null) ds.push(`custo real: <b>${brl(l.custo_kg)}/kg</b>`)
+    return `<div class="ri ${falta ? 'falta' : sobra ? 'sobra' : ''}"><div class="h"><span style="font-size:1.4rem">${l.emoji || '📦'}</span><b>${esc(l.nome)}</b><span class="kg">${l.caixas ? kg3(l.kg) + ' kg' : '—'}</span></div><div class="d">${ds.join('<br>')}</div></div>`
+  }).join('')
+  const fechado = REC.status === 'fechado'
+  $('#rs-corpo').innerHTML =
+    `<div class="tot"><div><small>Caixas</small><b>${cx.length}</b></div><div><small>Peso líquido</small><b>${kg1(tot)} kg</b></div></div>` +
+    (pend ? `<div class="aviso">⇡ ${pend} foto(s) ainda subindo${ONLINE ? '…' : ' — sem internet, sobem sozinhas'}</div>` : '') +
+    (confere ? `<button class="aviso" style="width:100%;text-align:left" onclick="ir('pesar');abrirLista()">⚠️ ${confere} caixa(s) pra conferir — toque pra ver</button>` : '') +
+    (R.local && !pend ? `<div class="mini" style="margin-bottom:8px">${ONLINE ? 'carregando a comparação com a nota…' : 'sem internet: a comparação com a nota aparece quando voltar'}</div>` : '') +
+    (srv && !R.local && !(srv.esperados || []).length ? `<div class="mini" style="margin-bottom:8px">Ainda sem nota pra comparar — ela liga sozinha quando chegar no sistema.</div>` : '') +
+    (lin || '<div class="vazio">Nenhuma caixa pesada.</div>') +
+    `<div style="display:grid;gap:10px;margin-top:14px">` +
+    (fechado ? `<div class="aviso" style="background:var(--pri-bg);color:var(--pri2)">✅ Recebimento fechado — o kg já vai pro custo real do CD.</div><button class="btn sec" onclick="reabrir()">Reabrir pra pesar mais</button>`
+      : `<button class="btn" onclick="fecharRec()">✓ Fechar recebimento</button><button class="btn sec" onclick="ir('pesar')">Voltar a pesar</button>`) +
+    `<button class="btn sec" onclick="sairPesar()">Início</button></div>`
+}
+async function fecharRec() {
+  const cx = (CXS_LOCAL[REC.id] || []).filter((c) => !c.apagado && c.status !== 'erro')
+  if (!cx.length) return toast('nenhuma caixa pesada')
+  const conf = cx.filter((c) => c.status === 'confere' || c.status === 'sem_leitura').length
+  if (conf && !confirm(`${conf} caixa(s) ainda pra conferir. Fechar assim mesmo?`)) return
+  REC.status = 'fechado'; salvarLocal()
+  await enfileirar('fechar', { id: REC.id }, { rec: REC.id })
+  bip('ok'); vibra(60); toast('recebimento fechado ✓'); pintarResumo()
+}
+async function reabrir() { try { await api('/receb/' + REC.id + '/reabrir', {}); REC.status = 'aberto'; salvarLocal(); ir('pesar'); pintarPesar() } catch (e) { toast(e.message) } }
+
+// ======================================================= caixas (tara) e itens
+function abrirTaraItem(itemId) {
+  const it = itemDe(itemId)
+  const ts = INI?.taras || []
+  abrirSheet(`<h2>${it.emoji || ''} ${esc(nomeItem(it))} — qual caixa?</h2>
+    <div class="mini" style="margin-bottom:10px">O peso da caixa vazia é descontado sozinho de toda caixa desse item.</div>
+    <button class="op" onclick="defTara('${it.id}', null)" style="${!it.tara_id ? 'border-color:var(--pri)' : ''}"><span class="ic">⚪</span><div><b>Sem tara</b><span>não desconta nada</span></div></button>
+    ${ts.map((t) => `<button class="op" onclick="defTara('${it.id}','${t.id}')" style="${it.tara_id === t.id ? 'border-color:var(--pri)' : ''}"><span class="ic">📦</span><div><b>${esc(t.nome)}</b><span>${kg3(t.kg)} kg vazia</span></div></button>`).join('')}
+    <button class="btn sec" onclick="VOLTA_CFG='pesar';fecharSheet();abrirConfig()">＋ Cadastrar caixa nova</button>`)
+}
+function defTara(itemId, taraId) {
+  const it = itemDe(itemId); it.tara_id = taraId; LS.set('pes_inicio', INI)
+  // recalcula na tela as caixas do recebimento aberto que usam a tara padrão
+  for (const c of CXS_LOCAL[REC?.id] || []) if (c.item_id === itemId && !c.tara_id && c.kg_bruto != null) { const t = taraDe(taraId); c.tara_kg = t ? Number(t.kg) : 0; c.kg_liquido = Math.max(0, Math.round((c.kg_bruto - c.tara_kg) * 1000) / 1000) }
+  salvarLocal()
+  enfileirar('item', { id: itemId, tara_id: taraId })
+  fecharSheet(); if (REC) pintarPesar(); if ($('#config').classList.contains('on')) pintarConfig()
+  toast(taraId ? 'tara salva pra ' + nomeItem(it) : 'sem tara')
+}
+function abrirConfig() { VOLTA_CFG = VOLTA_CFG || 'inicio'; pintarConfig(); ir('config') }
+function pintarConfig() {
+  const ts = INI?.taras || [], its = INI?.itens || []
+  const opt = (sel) => `<option value="">sem tara</option>` + ts.map((t) => `<option value="${t.id}" ${t.id === sel ? 'selected' : ''}>${esc(t.nome)} (${kg3(t.kg)})</option>`).join('')
+  $('#cfg-corpo').innerHTML = `
+    <div class="kick" style="margin-top:4px">Tipos de caixa (tara)</div>
+    ${ts.length ? ts.map((t) => `<div class="cfg-l"><span class="nm">📦 ${esc(t.nome)}</span><input inputmode="decimal" value="${String(t.kg).replace('.', ',')}" style="width:96px" onchange="salvarTaraKg('${t.id}', this.value)"><span class="mini">kg</span></div>`).join('') : '<div class="vazio">Nenhuma caixa cadastrada ainda.</div>'}
+    <div class="card" style="margin-top:12px">
+      <b>＋ Caixa nova</b>
+      <div class="mini" style="margin:4px 0 10px">Ponha a caixa VAZIA na balança e tire a foto — a IA lê o peso. Ou digite.</div>
+      <input id="tara-nome" placeholder="nome (ex.: caixa plástica verde)" style="width:100%;height:52px;border-radius:12px;border:2px solid var(--bord);background:var(--card);padding:0 12px;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="btn" onclick="taraFoto()">📷 Foto da vazia</button>
+        <button class="btn sec" onclick="taraDigitar()">⌨️ Digitar kg</button>
+      </div>
+    </div>
+    <div class="kick">Caixa padrão de cada item</div>
+    ${its.map((i) => `<div class="cfg-l"><span class="nm">${i.emoji || '📦'} ${esc(nomeItem(i))}</span><select onchange="defTaraCfg('${i.id}', this.value)">${opt(i.tara_id)}</select></div>`).join('')}`
+}
+function defTaraCfg(itemId, v) { const it = itemDe(itemId); it.tara_id = v || null; LS.set('pes_inicio', INI); enfileirar('item', { id: itemId, tara_id: v || null }); toast('salvo') }
+function salvarTaraKg(id, v) { const n = Number(String(v).replace(',', '.')); if (!isFinite(n) || n < 0 || n > 30) return toast('peso inválido'); const t = taraDe(id); t.kg = n; LS.set('pes_inicio', INI); enfileirar('tara', { id, kg: n }); toast('tara salva') }
+function taraDigitar() {
+  const nome = $('#tara-nome').value.trim(); if (!nome) return toast('dê um nome pra caixa')
+  const v = prompt('Peso da caixa vazia (kg), ex.: 1,800'); if (v == null) return
+  const n = Number(String(v).replace(',', '.')); if (!isFinite(n) || n < 0 || n > 30) return toast('peso inválido')
+  const id = 'tara-' + nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  INI.taras.push({ id, nome, kg: n, ativo: 1 }); LS.set('pes_inicio', INI)
+  enfileirar('tara', { nome, kg: n }); pintarConfig(); toast('caixa cadastrada')
+}
+function taraFoto() { if (!$('#tara-nome').value.trim()) return toast('dê um nome pra caixa'); $('#arq-tara').click() }
+async function taraDoArquivo(inp) {
+  const f = inp.files && inp.files[0]; inp.value = ''
+  if (!f) return
+  const bmp = await createImageBitmap(f).catch(() => null); if (!bmp) return toast('não abriu a foto')
+  toast('lendo o peso da caixa vazia…')
+  try {
+    const r = await api('/taras/foto', { nome: $('#tara-nome').value.trim(), imagem: reduzir(bmp, bmp.width, bmp.height, 1280, 0.72) })
+    if (!r.ok) return toast(r.erro || 'não leu — digite o peso')
+    const i = INI.taras.findIndex((t) => t.id === r.tara.id); if (i >= 0) INI.taras[i] = r.tara; else INI.taras.push(r.tara); LS.set('pes_inicio', INI)
+    bip('ok'); toast(`${r.tara.nome}: ${kg3(r.tara.kg)} kg ✓`); pintarConfig()
+  } catch (e) { toast(e.rede ? 'sem internet — use "Digitar kg"' : e.message) }
+}
+
+// ======================================================= início do app
+async function iniciar() {
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {})
+  pintarRede()
+  if (!SESS) return telaLogin()
+  if (INI) { pintarInicio(); ir('inicio') }
+  try { await carregarInicio(); if (!$('#pesar').classList.contains('on')) ir($('#resumo').classList.contains('on') ? 'resumo' : 'inicio') } catch (e) { if (!e.auth && !INI) { ir('inicio'); pintarInicio(); toast('sem internet — abrindo o que já tinha') } }
+  bombear()
+  setInterval(() => { if (ONLINE && FILA_N === 0 && $('#inicio').classList.contains('on')) carregarInicio().catch(() => {}) }, 60000)
+}
+iniciar()
+</script>
+</body>
+</html>
