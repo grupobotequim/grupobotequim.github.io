@@ -327,7 +327,7 @@ async function telaComparativo(sem) {
 
 // ======================================================= UNIFORME E EPI
 let PESSOAS = null, EPI_F = { casa: '' }
-const SIT = { ok: '<span class="chip v">em dia</span>', vence_logo: '<span class="chip a">troca em breve</span>', vencida: '<span class="chip r">troca vencida</span>', ca_vencido: '<span class="chip r">CA vencido</span>', devolvido: '<span class="chip n">devolvido</span>', trocado: '<span class="chip n">trocado</span>' }
+const SIT = { ok: '<span class="chip v">em dia</span>', vence_logo: '<span class="chip a">troca em breve</span>', vencida: '<span class="chip r">troca vencida</span>', ca_vencido: '<span class="chip r">CA vencido</span>', devolvido: '<span class="chip n">devolvido</span>', trocado: '<span class="chip n">trocado</span>', devolver: '<span class="chip r">SAIU — devolver</span>', nao_devolvido: '<span class="chip r">não devolveu</span>' }
 const casaPessoa = (txt) => { const t = String(txt || '').toLowerCase(); return /jardim|esmeralda/.test(t) ? 'jardim' : /caetano|scs/.test(t) ? 'scs' : /sbc|bernardo/.test(t) ? 'sbc' : /sp2|washington/.test(t) ? 'sp2' : /^cd\b|distrib/.test(t) ? 'cd' : '' }
 async function telaEpi() {
   const q = EPI_F.casa ? '?casa=' + EPI_F.casa : ''
@@ -338,14 +338,16 @@ async function telaEpi() {
   <div class="card"><div class="row"><div><h2>🦺 Uniforme e EPI</h2><div class="sub">O que cada pessoa recebeu, quando, tamanho, CA e quando trocar. Alerta de troca vencida.</div></div>
     <button class="pri" style="flex:0;white-space:nowrap" onclick="novaEntrega()">+ Registrar entrega</button></div></div>
   <div class="kpis">${todas.map((c) => `<div class="kpi" style="cursor:pointer;${EPI_F.casa === c.id ? 'border-color:var(--ac);background:var(--ac2)' : ''}" onclick="EPI_F.casa=EPI_F.casa==='${c.id}'?'':'${c.id}';telaEpi()"><b>${c.pessoas}</b><span>${esc(c.nome)} · pessoas c/ entrega</span>
-    <div style="margin-top:4px">${c.vencidas ? `<span class="chip r">${c.vencidas} vencidas</span> ` : ''}${c.vence_logo ? `<span class="chip a">${c.vence_logo} em breve</span>` : ''}${!c.vencidas && !c.vence_logo && c.itens ? '<span class="chip v">em dia</span>' : ''}</div></div>`).join('')}</div>
+    <div style="margin-top:4px">${c.a_devolver ? `<span class="chip r">${c.a_devolver} a devolver</span> ` : ''}${c.vencidas ? `<span class="chip r">${c.vencidas} vencidas</span> ` : ''}${c.vence_logo ? `<span class="chip a">${c.vence_logo} em breve</span>` : ''}${!c.vencidas && !c.vence_logo && c.itens ? '<span class="chip v">em dia</span>' : ''}</div></div>`).join('')}</div>
   ${d.alertas.length ? `<div class="aviso">⚠️ <b>${d.alertas.length} troca(s) pedindo atenção</b>${EPI_F.casa ? ' nesta casa' : ''}: ${d.alertas.slice(0, 6).map((e) => `${esc(e.pessoa_nome.split(' ')[0])} — ${esc(e.item_nome)} (${e.situacao === 'ca_vencido' ? 'CA vencido' : 'troca ' + brc(e.troca_em)})`).join(' · ')}${d.alertas.length > 6 ? '…' : ''}</div>` : ''}
+  ${cardDevolver(d.devolver || [])}
+  ${cardComQuem(d.entregas)}
   <div class="card tw"><div class="row" style="margin-bottom:8px"><h2 style="flex:2">Entregas ${EPI_F.casa ? '— ' + esc(nomeCasa(EPI_F.casa)) : '(todas as casas)'}</h2><input style="flex:1" placeholder="🔎 buscar pessoa" oninput="filtrarEpi(this.value)"></div>
     ${d.entregas.length ? `<table id="t-epi"><tr><th>Pessoa</th><th>Item</th><th>Tam.</th><th>Qtd</th><th>Entregue</th><th>CA</th><th>Trocar em</th><th>Situação</th><th>Recibo</th><th></th></tr>
     ${d.entregas.map((e) => `<tr data-n="${esc(e.pessoa_nome.toLowerCase())}"><td><b>${esc(e.pessoa_nome)}</b><div class="sub">${esc(nomeCasa(e.casa_id) || '')}</div></td><td>${e.tipo === 'epi' ? '🦺' : '👕'} ${esc(e.item_nome)}${e.demo ? ' <span class="chip demo">DEMO</span>' : ''}</td><td>${esc(e.tamanho || '—')}</td><td>${e.qtd}</td><td>${brc(e.data_entrega)}</td>
       <td class="sub">${esc(e.ca || '—')}${e.ca_validade ? '<br>val. ' + brc(e.ca_validade) : ''}</td><td>${e.troca_em ? br(e.troca_em) : '—'}</td><td>${SIT[e.situacao] || e.situacao}</td>
       <td>${e.assinatura ? `<img src="${fotoUrl(e.assinatura)}" style="height:30px;background:#fff;border:1px solid var(--bord);border-radius:6px;cursor:pointer" onclick="window.open(this.src)">` : ''}${e.foto ? ` <a href="${fotoUrl(e.foto)}" target="_blank">📷</a>` : ''}${!e.assinatura && !e.foto ? '<span class="chip a">sem recibo</span>' : ''}</td>
-      <td style="white-space:nowrap">${e.status === 'ativo' ? `<button class="mini" onclick="trocar(${e.id})">trocar</button>` : ''} <button class="mini perigo" onclick="apagarEnt(${e.id})">×</button></td></tr>`).join('')}</table>` : '<div class="vazio">nenhuma entrega registrada ainda</div>'}</div>
+      <td style="white-space:nowrap">${e.situacao === 'devolver' ? `<button class="mini" onclick="devolucao('${e.id}','devolvido')">devolveu</button> ` : ''}${e.status === 'ativo' && e.situacao !== 'devolver' ? `<button class="mini" onclick="trocar(${e.id})">trocar</button>` : ''} <button class="mini perigo" onclick="apagarEnt(${e.id})">×</button></td></tr>`).join('')}</table>` : '<div class="vazio">nenhuma entrega registrada ainda</div>'}</div>
   <div class="card"><details><summary style="cursor:pointer;font-weight:700">⚙️ Itens de uniforme e EPI (prazo de troca e CA)</summary>
     <table style="margin-top:8px"><tr><th>Item</th><th>Tipo</th><th>CA padrão</th><th>Troca (dias)</th></tr>${cat.map((c) => `<tr><td>${esc(c.nome)}</td><td>${c.tipo === 'epi' ? '🦺 EPI' : '👕 Uniforme'}</td>
       <td><input id="cat-ca-${c.id}" value="${esc(c.ca || '')}" style="max-width:110px;padding:5px" onchange="salvarCat(${c.id})"></td>
@@ -353,7 +355,35 @@ async function telaEpi() {
     <div class="row" style="margin-top:10px"><input id="n-cat" placeholder="novo item (ex.: Protetor auricular)"><select id="n-tipo" style="flex:0;min-width:120px"><option value="epi">EPI</option><option value="uniforme">Uniforme</option></select><input id="n-dias" type="number" placeholder="troca (dias)" style="flex:0;min-width:110px"><button class="sec" style="flex:0" onclick="api('/api/qualidade/epi/catalogo',{nome:$('#n-cat').value,tipo:$('#n-tipo').value,troca_dias:$('#n-dias').value}).then(()=>telaEpi())">Adicionar</button></div></details></div>`
 }
 async function salvarCat(id) { try { await api('/api/qualidade/epi/catalogo', { id, ca: $('#cat-ca-' + id).value, troca_dias: $('#cat-d-' + id).value }); window._CAT = null; toast('salvo') } catch (e) { toast('⚠️ ' + e.message) } }
-function filtrarEpi(v) { v = v.toLowerCase(); document.querySelectorAll('#t-epi tr[data-n]').forEach((tr) => tr.style.display = tr.dataset.n.includes(v) ? '' : 'none') }
+function filtrarEpi(v) { v = v.toLowerCase(); document.querySelectorAll('#t-epi tr[data-n], #t-quem tr[data-n]').forEach((tr) => tr.style.display = tr.dataset.n.includes(v) ? '' : 'none') }
+// 🦺↩️ 29/10 (Lucas): quem saiu da empresa aparece NA HORA aqui (cadastro do RH + caixinha/extras) pra pegar de volta
+const itemTxt = (i) => `${i.tipo === 'epi' ? '🦺' : '👕'} ${i.qtd || 1}× ${esc(i.item_nome)}${i.tamanho ? ' (' + esc(i.tamanho) + ')' : ''}`
+function cardDevolver(dv) {
+  if (!dv.length) return ''
+  return `<div class="card" style="border:2px solid #d94b4b"><h2>🔴 Saiu da empresa — pegar de volta <span class="chip r">${dv.length} pessoa${dv.length > 1 ? 's' : ''}</span></h2>
+    <div class="sub">Aparece sozinho quando a pessoa fica inativa no cadastro do RH ou na caixinha/extras. Marque quando receber de volta.</div>
+    ${dv.map((g) => `<div style="border-top:1px solid var(--bord);padding:9px 0;margin-top:6px"><div class="row" style="align-items:center">
+      <div style="flex:3"><b>${esc(g.pessoa_nome)}</b> <span class="sub">${esc(nomeCasa(g.casa_id) || '')}${g.cargo ? ' · ' + esc(g.cargo) : ''} · saiu ${g.saiu_em ? brc(g.saiu_em) : '—'}</span>
+        <div style="margin-top:3px">${g.itens.map(itemTxt).join(' · ')}</div></div>
+      <button class="mini" style="flex:0;white-space:nowrap" onclick="devolucao('${g.itens.map((i) => i.id).join(',')}','devolvido')">✔ devolveu tudo</button>
+      <button class="mini perigo" style="flex:0;white-space:nowrap" onclick="devolucao('${g.itens.map((i) => i.id).join(',')}','nao_devolvido')">✖ não devolveu</button></div></div>`).join('')}</div>`
+}
+function cardComQuem(ents) {
+  const at = ents.filter((e) => e.status === 'ativo'), g = {}
+  for (const e of at) { const k = e.pessoa_id || e.pessoa_nome; (g[k] = g[k] || { nome: e.pessoa_nome, casa: e.casa_id, itens: [], dev: false }).itens.push(e); if (e.situacao === 'devolver') g[k].dev = true }
+  const ps = Object.values(g).sort((a, b) => (b.dev - a.dev) || a.nome.localeCompare(b.nome))
+  if (!ps.length) return ''
+  return `<div class="card tw"><details open><summary style="cursor:pointer;font-weight:700">👤 Com quem está cada coisa — ${ps.length} pessoa${ps.length > 1 ? 's' : ''}, ${at.reduce((s, e) => s + (e.qtd || 1), 0)} itens</summary>
+    <table id="t-quem" style="margin-top:8px"><tr><th>Pessoa</th><th>Está com</th></tr>${ps.map((p) => `<tr data-n="${esc(p.nome.toLowerCase())}"><td><b>${esc(p.nome)}</b>${p.dev ? ' <span class="chip r">saiu</span>' : ''}<div class="sub">${esc(nomeCasa(p.casa) || '')}</div></td>
+      <td>${p.itens.map((i) => itemTxt(i) + (i.demo ? ' <span class="chip demo">DEMO</span>' : '')).join('<br>')}</td></tr>`).join('')}</table></details></div>`
+}
+async function devolucao(ids, resultado) {
+  let quem = ''; try { quem = localStorage.getItem('qual_recebe') || '' } catch {}
+  quem = prompt(resultado === 'devolvido' ? 'Quem recebeu de volta? (seu nome)' : 'Não devolveu. Quem está registrando? (opcional: escreva o motivo depois do nome)', quem)
+  if (quem === null) return
+  try { localStorage.setItem('qual_recebe', quem.split(' — ')[0]) } catch {}
+  try { const r = await api('/api/qualidade/epi/devolucao', { ids: String(ids).split(',').map(Number), resultado, recebido_por: quem }); toast(`✔ ${r.n} item(ns) baixado(s)`); telaEpi() } catch (e) { toast('⚠️ ' + e.message) }
+}
 async function trocar(id) { if (!confirm('Marcar como trocado? (depois registre a nova entrega)')) return; await api('/api/qualidade/epi/entregas/' + id, { status: 'trocado' }); novaEntrega(); telaEpi() }
 async function apagarEnt(id) { if (!confirm('Apagar este registro?')) return; await api('/api/qualidade/epi/entregas/' + id, { apagar: true }); telaEpi() }
 let ASSIN = null
@@ -366,13 +396,14 @@ async function novaEntrega() {
     <label>Item</label><select id="e-item" onchange="itemEscolhido()">${cat.map((c) => `<option value="${c.id}">${c.tipo === 'epi' ? '🦺' : '👕'} ${esc(c.nome)}</option>`).join('')}</select>
     <div class="row"><div><label>Tamanho</label><input id="e-tam" placeholder="P, M, G, 40…"></div><div><label>Quantidade</label><input id="e-qtd" type="number" value="1" min="1"></div></div>
     <div class="row"><div><label>CA (EPI)</label><input id="e-ca" placeholder="nº do CA"></div><div><label>Validade do CA</label><input id="e-cav" type="date"></div></div>
-    <label>Trocar em</label><input id="e-troca" type="date">
+    <div class="row"><div><label>Trocar em</label><input id="e-troca" type="date"></div><div><label>Quem entregou</label><input id="e-por" placeholder="seu nome"></div></div>
     <label>Assinatura de quem recebeu</label><canvas class="assin" id="e-assin"></canvas><div class="row" style="margin-top:4px"><button class="mini" style="flex:0" onclick="limparAssin()">limpar assinatura</button>
     <label class="mini" style="flex:0;margin:0;cursor:pointer;padding:6px 12px;border-radius:10px;background:var(--ac2);color:var(--ac);white-space:nowrap">📷 ou foto do recibo<input type="file" accept="image/*" capture="environment" style="display:none" onchange="fotoRecibo(this)"></label><label class="mini" style="flex:0;margin:0 0 0 6px;cursor:pointer;padding:6px 12px;border-radius:10px;background:var(--ac2);color:var(--ac);white-space:nowrap">🖼️ Galeria<input type="file" accept="image/*" style="display:none" onchange="fotoRecibo(this)"></label><span id="e-fok" class="sub"></span></div>
     <label>Observação</label><input id="e-obs">
     <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="e-demo" style="width:auto"> registro de teste (DEMO)</label>
     <div class="row" style="margin-top:14px"><button onclick="modal('')">Cancelar</button><button class="pri" onclick="salvarEntrega()">Salvar entrega</button></div>`)
   itemEscolhido(); iniciarAssin()
+  try { $('#e-por').value = localStorage.getItem('qual_entrega_por') || '' } catch {}
 }
 function pesEscolhida() { const p = PESSOAS.find((x) => x.nome === $('#e-pes').value); if (p) { const c = casaPessoa(p.casa); if (c) $('#e-casa').value = c } }
 function itemEscolhido() { const it = (window._CAT || []).find((c) => c.id === +$('#e-item').value); if (!it) return; $('#e-ca').value = it.ca || ''; const d = new Date($('#e-data').value + 'T12:00:00Z'); if (it.troca_dias) { d.setUTCDate(d.getUTCDate() + it.troca_dias); $('#e-troca').value = d.toISOString().slice(0, 10) } else $('#e-troca').value = '' }
@@ -392,8 +423,9 @@ async function salvarEntrega() {
   const p = PESSOAS.find((x) => x.nome === nome)
   try {
     const r = await api('/api/qualidade/epi/entregas', { pessoa_id: p ? p.id : null, pessoa_nome: nome, casa_id: $('#e-casa').value, item_id: +$('#e-item').value, tamanho: $('#e-tam').value, qtd: +$('#e-qtd').value,
-      data_entrega: $('#e-data').value, ca: $('#e-ca').value, ca_validade: $('#e-cav').value, troca_em: $('#e-troca').value, obs: $('#e-obs').value, demo: $('#e-demo').checked,
+      data_entrega: $('#e-data').value, ca: $('#e-ca').value, ca_validade: $('#e-cav').value, troca_em: $('#e-troca').value, obs: $('#e-obs').value, demo: $('#e-demo').checked, entregue_por: $('#e-por').value,
       assinatura: ASSIN_TEM ? $('#e-assin').toDataURL('image/png') : null, foto: FOTO_REC, foto_original: FOTO_ORIG })
+    try { localStorage.setItem('qual_entrega_por', $('#e-por').value) } catch {}
     modal(''); toast('✔ entrega registrada' + (r.troca_em ? ' — troca em ' + br(r.troca_em) : '')); telaEpi()
   } catch (e) { toast('⚠️ ' + e.message) }
 }
