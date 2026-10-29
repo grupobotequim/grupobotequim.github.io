@@ -402,6 +402,7 @@ async function salvarEntrega() {
 let MOD = null
 async function telaModelos(id) {
   if (!id) {
+    if (modT || modSalvando) { await salvarModelo(); await carregarBase() } // 29/10 (Maria): voltar pra lista não perde o que foi digitado
     $('#main').innerHTML = `<div class="card"><h2>Modelos de relatório</h2><div class="sub">Cada modelo tem as perguntas, separadas por área, e o PESO de cada uma na nota. Mudar o modelo não altera relatórios já feitos.</div></div>
     ${MODELOS.map((m) => `<div class="card"><div class="row"><div><h2>${esc(m.nome)}</h2><div class="sub">${m.n_perguntas} perguntas · soma dos pesos ${String(m.soma_pesos || 0).replace('.', ',')} · para ${m.para === 'loja' ? 'lojas' : m.para === 'cd' ? 'CD' : 'todas as casas'}</div><div class="sub">${esc(m.descricao || '')}</div></div>
       <button class="sec" style="flex:0" onclick="telaModelos(${m.id})">Editar</button></div></div>`).join('')}
@@ -409,24 +410,54 @@ async function telaModelos(id) {
       <select id="nm-para"><option value="todas">todas as casas</option><option value="loja">só lojas</option><option value="cd">só CD</option></select><button class="pri" style="flex:0" onclick="novoModelo()">Criar</button></div></div>`
     return
   }
-  MOD = await api('/api/qualidade/modelos/' + id)
+  if (modT) await salvarModelo()
+  MOD = await api('/api/qualidade/modelos/' + id); MOD_ST = ''
   desenharModelo()
 }
 function desenharModelo() {
   const areas = [...new Set(MOD.perguntas.map((p) => p.area))]
   $('#main').innerHTML = `<div class="card"><button class="mini" onclick="telaModelos()">← modelos</button>
-    <label>Nome do modelo</label><input value="${esc(MOD.nome)}" oninput="MOD.nome=this.value"><label>Descrição</label><input value="${esc(MOD.descricao || '')}" oninput="MOD.descricao=this.value">
+    <label>Nome do modelo</label><input value="${esc(MOD.nome)}" oninput="MOD.nome=this.value;modSujo()"><label>Descrição</label><input value="${esc(MOD.descricao || '')}" oninput="MOD.descricao=this.value;modSujo()">
     <div class="sub" style="margin-top:8px">Peso = quanto a pergunta vale na nota (1 normal · 2 importante · 3 crítico). Respostas: 😃 vale tudo · 😐 metade · ☹️ zero · N/A não conta.</div></div>
   ${areas.map((a) => `<div class="card"><div class="row"><input value="${esc(a)}" style="font-weight:700" onchange="renArea(${JSON.stringify(a).replace(/"/g, '&quot;')},this.value)"><button class="mini sec" style="flex:0;white-space:nowrap" onclick="addQ(${JSON.stringify(a).replace(/"/g, '&quot;')})">+ pergunta</button></div>
     <div class="ed-q sub" style="border:0"><span>Pergunta</span><span>Peso</span><span></span></div>
-    ${MOD.perguntas.map((p, i) => p.area !== a ? '' : `<div class="ed-q"><input value="${esc(p.pergunta)}" oninput="MOD.perguntas[${i}].pergunta=this.value"><input type="number" min="0" max="10" step="0.5" value="${p.peso}" oninput="MOD.perguntas[${i}].peso=+this.value"><button class="mini perigo" onclick="MOD.perguntas.splice(${i},1);desenharModelo()">×</button></div>`).join('')}</div>`).join('')}
+    ${MOD.perguntas.map((p, i) => p.area !== a ? '' : `<div class="ed-q"><input data-i="${i}" value="${esc(p.pergunta)}" placeholder="escreva a pergunta" oninput="MOD.perguntas[${i}].pergunta=this.value;modSujo()"><input type="number" inputmode="decimal" min="0" max="10" step="0.5" value="${p.peso}" oninput="MOD.perguntas[${i}].peso=+String(this.value).replace(',', '.');modSujo()"><button class="mini perigo" onclick="MOD.perguntas.splice(${i},1);desenharModelo();modSujo()">×</button></div>`).join('')}</div>`).join('')}
   <div class="card"><div class="row"><input id="na-area" placeholder="nova área (ex.: Vestiário)"><button class="sec" style="flex:0;white-space:nowrap" onclick="if($('#na-area').value){addQ($('#na-area').value)}">+ área</button></div></div>
   <div class="row"><button class="perigo" style="flex:0" onclick="if(confirm('Arquivar este modelo?'))api('/api/qualidade/modelos/${MOD.id}',{apagar:true}).then(async()=>{await carregarBase();telaModelos()})">Arquivar modelo</button></div>`
-  $('#barra').innerHTML = `<div class="barra"><div class="sub" style="flex:1">${MOD.perguntas.length} perguntas · soma dos pesos ${MOD.perguntas.reduce((s, p) => s + (+p.peso || 0), 0)}</div><button class="pri" onclick="salvarModelo()">Salvar modelo</button></div>`
+  $('#barra').innerHTML = `<div class="barra"><div class="sub" style="flex:1">${MOD.perguntas.length} perguntas · soma dos pesos ${MOD.perguntas.reduce((s, p) => s + (+p.peso || 0), 0)}<div id="mod-st" style="font-weight:600">${esc(MOD_ST)}</div></div><button class="pri" onclick="salvarModelo(true)">Salvar modelo</button></div>`
 }
-function addQ(area) { MOD.perguntas.push({ area, pergunta: '', peso: 1 }); desenharModelo(); const ins = [...document.querySelectorAll('.ed-q input:not([type])')]; const alvo = ins.filter((x) => !x.value).pop(); alvo && alvo.focus() }
-function renArea(de, para) { for (const p of MOD.perguntas) if (p.area === de) p.area = para; desenharModelo() }
-async function salvarModelo() { try { await api('/api/qualidade/modelos/' + MOD.id, { nome: MOD.nome, descricao: MOD.descricao, perguntas: MOD.perguntas }); await carregarBase(); toast('✔ modelo salvo'); telaModelos(MOD.id) } catch (e) { toast('⚠️ ' + e.message) } }
+// 29/10 (Maria): pergunta nova entra no FIM DA PRÓPRIA ÁREA (antes ia pro fim do modelo) e o modelo SALVA SOZINHO
+function addQ(area) {
+  let pos = MOD.perguntas.length
+  for (let i = MOD.perguntas.length - 1; i >= 0; i--) if (MOD.perguntas[i].area === area) { pos = i + 1; break }
+  MOD.perguntas.splice(pos, 0, { area, pergunta: '', peso: 1 }); desenharModelo()
+  const alvo = document.querySelector(`.ed-q input[data-i="${pos}"]`); alvo && alvo.focus()
+}
+function renArea(de, para) { for (const p of MOD.perguntas) if (p.area === de) p.area = para; desenharModelo(); modSujo() }
+// salva sozinho ~1s depois de parar de digitar; uma gravação por vez; as perguntas novas recebem o id que a nuvem devolve (não duplica)
+var modT = null, modSalvando = null, modDeNovo = false, MOD_ST = ''
+function modStatus(t) { MOD_ST = t; const e = $('#mod-st'); if (e) e.textContent = t }
+function modSujo() { clearTimeout(modT); modT = setTimeout(() => salvarModelo(), 1000); modStatus('salvando…') }
+addEventListener('beforeunload', (e) => { if (modT || modSalvando) { e.preventDefault(); e.returnValue = '' } })
+async function salvarModelo(manual) {
+  clearTimeout(modT); modT = null
+  if (!MOD) return
+  if (modSalvando) { modDeNovo = true; return modSalvando.then(() => {}) }
+  const alvo = MOD, envio = alvo.perguntas.slice()
+  modStatus('salvando…')
+  modSalvando = (async () => {
+    try {
+      const r = await api('/api/qualidade/modelos/' + alvo.id, { nome: alvo.nome, descricao: alvo.descricao, perguntas: envio })
+      if (Array.isArray(r.ids)) envio.forEach((p, i) => { if (r.ids[i]) p.id = r.ids[i] })
+      else if (MOD === alvo) { MOD = await api('/api/qualidade/modelos/' + alvo.id); if ($('#mod-st')) desenharModelo() } // servidor antigo: recarrega
+      carregarBase().catch(() => {})
+      modStatus('✔ salvo às ' + new Date().toTimeString().slice(0, 5))
+      if (manual) toast('✔ modelo salvo')
+    } catch (e) { modStatus('⚠️ não salvou — ' + e.message); toast('⚠️ não salvou: ' + e.message, 5000) }
+  })()
+  try { await modSalvando } finally { modSalvando = null }
+  if (modDeNovo) { modDeNovo = false; await salvarModelo(manual) }
+}
 async function novoModelo() { try { const r = await api('/api/qualidade/modelos', { nome: $('#nm-nome').value, copiar_de: $('#nm-copia').value || null, para: $('#nm-para').value }); await carregarBase(); telaModelos(r.id) } catch (e) { toast('⚠️ ' + e.message) } }
 
 // ======================================================= RESTAURANTES
