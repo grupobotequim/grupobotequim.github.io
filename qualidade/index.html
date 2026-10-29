@@ -173,7 +173,7 @@ function telaInicio() {
   <div class="card" style="${SEL.modelo ? '' : 'opacity:.5;pointer-events:none'}"><div class="passo">Passo 3</div><h2>Dados da visita</h2>
     <div class="row"><div><label>Nutricionista</label><input id="i-nutri" value="${esc(LS.get('qual_nutri', 'Kátia'))}"></div><div><label>Data</label><input id="i-data" type="date" value="${hoje()}"></div></div>
     <label>Quem acompanhou na casa (opcional)</label><input id="i-acomp" placeholder="ex.: gerente de plantão">
-    <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="i-demo" style="width:auto" checked> Relatório de teste (DEMO — não entra no ranking oficial)</label>
+    <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="i-demo" style="width:auto"> Relatório de teste (DEMO — só marque se for treino; não entra no ranking oficial)</label>
     <div style="margin-top:14px"><button class="pri" style="width:100%;padding:14px" onclick="comecar()">Começar o relatório →</button></div></div>
   <div id="rasc"></div>`
   api('/api/qualidade/relatorios?status=rascunho').then((rs) => { if (rs.length) $('#rasc').innerHTML = `<div class="card"><h2>Continuar rascunho</h2>${rs.map((r) => `<div class="row" style="margin-top:8px"><div>${esc(nomeCasa(r.casa_id))} — ${esc(r.modelo_nome)}<div class="sub">${br(r.data)} · ${esc(r.nutri)} ${r.demo ? '<span class="chip demo">DEMO</span>' : ''}</div></div><button class="sec" style="flex:0" onclick="abrir('${r.codigo}')">Continuar</button></div>`).join('')}</div>` }).catch(() => {})
