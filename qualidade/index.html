@@ -300,6 +300,9 @@ async function apagarDemo() { if (!confirm('Apagar TODOS os relatórios e entreg
 
 // ======================================================= COMPARATIVO
 let SEMANA = null
+// 📄 30/10 (Maria): PDF GERAL do ranking semanal e das reincidências — 1 página, resumo por casa, sem item a item
+const RANK_PDF = 'ranking.html'
+function pdfSemana(tipo, sem) { window.open(`${RANK_PDF}?tipo=${tipo}&semana=${sem}&baixar=1`) }
 async function telaComparativo(sem) {
   if (sem) SEMANA = sem
   const d = await api('/api/qualidade/comparativo' + (SEMANA ? '?semana=' + SEMANA : ''))
@@ -311,7 +314,8 @@ async function telaComparativo(sem) {
   <div class="card"><div class="row"><button class="mini" style="flex:0" onclick="telaComparativo('${ant(-1)}')">◀</button>
     <div style="text-align:center"><h2>Semana ${brc(d.semana.de)} a ${br(d.semana.ate)}</h2><div class="sub">comparada com ${brc(d.anterior.de)} a ${brc(d.anterior.ate)} · média dos relatórios da semana</div></div>
     <button class="mini" style="flex:0" onclick="telaComparativo('${ant(1)}')">▶</button></div>
-    ${d.tem_demo ? '<div class="sub" style="margin-top:6px;text-align:center"><span class="chip demo">DEMO</span> esta semana inclui relatórios de teste</div>' : ''}</div>
+    ${d.tem_demo ? '<div class="sub" style="margin-top:6px;text-align:center"><span class="chip demo">DEMO</span> esta semana inclui relatórios de teste</div>' : ''}
+    <div class="row" style="margin-top:10px"><button class="sec" onclick="pdfSemana('ranking','${d.semana.de}')">📄 PDF do ranking da semana</button><button class="sec" onclick="pdfSemana('reinc','${d.semana.de}')">📄 PDF das reincidências</button></div></div>
   <div class="card tw"><h2 style="margin-bottom:8px">Casas lado a lado</h2>
     <table><tr><th>#</th><th>Casa</th>${d.modelos.map((m) => `<th>${esc(m)}</th>`).join('')}<th>Média da semana<div class="sub" style="font-weight:400">sem DEMO</div></th><th>vs semana anterior</th></tr>
     ${linhas.map((l) => `<tr><td><b>${l.pos ? l.pos + 'º' : '—'}</b></td><td><b>${esc(l.nome)}</b><div class="sub">${esc(l.apelido || '')}</div></td>
