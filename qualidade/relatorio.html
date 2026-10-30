@@ -40,12 +40,15 @@ td{padding:5px 6px;border-bottom:1px solid #eef1ef;vertical-align:middle;text-al
 .cab{display:grid;grid-template-columns:1fr 44px 120px;gap:6px;font-size:10px;color:#5b6b64;text-transform:uppercase;font-weight:700;border-bottom:1px solid #dfe5e2;padding:8px 6px 4px;margin-top:6px}
 .lin{display:grid;grid-template-columns:1fr 44px 120px;gap:6px;padding:5px 6px;border-bottom:1px solid #eef1ef;break-inside:avoid;page-break-inside:avoid}
 .lin .pp{color:#93a19a;text-align:center}
+/* 30/10 (Katia): titulo da area / do bloco nao fica sozinho no pe da pagina */
+.cab,h2,.blk:has(>h2:only-child){break-after:avoid;page-break-after:avoid}
 .rod{margin-top:22px;display:flex;justify-content:space-between;color:#93a19a;font-size:10px;border-top:1px solid #dfe5e2;padding-top:6px}
 .ass{margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:40px}.ass div{border-top:1px solid #16211d;padding-top:4px;text-align:center;color:#5b6b64}
 .demo{background:#ede9fe;color:#6d28d9;font-weight:700;padding:6px 10px;border-radius:8px;margin-top:8px;text-align:center}
 .acoes{position:fixed;top:10px;right:10px;display:flex;gap:6px}.acoes button{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid #0f766e;background:#0f766e;color:#fff;cursor:pointer}
 @media print{.acoes{display:none}.pag{padding:0}}
 @media(max-width:640px){.info{grid-template-columns:1fr 1fr}.acoes{position:static;justify-content:flex-end;padding:8px}}
+#capa-pdf{position:fixed;inset:0;z-index:50;background:rgba(255,255,255,.96);display:grid;place-items:center;text-align:center;font-size:18px;font-weight:700;color:#0f766e;touch-action:none}#capa-pdf small{font-weight:400;font-size:13px;color:#5b6b64}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -66,20 +69,32 @@ let NOME_PDF = 'relatorio.pdf'
 // 27/10 (Maria: 'qualidade meio ruim, principalmente das fotos'): antes o html2pdf tirava UM print da pagina
 // inteira em escala 2 e fatiava; agora cada bloco (.blk) vira imagem em escala 3 e entra pagina por pagina,
 // sem cortar bloco no meio (e sem estourar o limite de canvas do iPhone).
+// 30/10 (Katia: 'da metade pra baixo a tabulacao fica desconfigurada'): a posicao de cada bloco era medida
+// na tela DEPOIS de cada foto do bloco; se a pessoa arrastava a pagina pro lado enquanto gerava (no iPhone a
+// pagina fica com 820px), os blocos iam saindo pra esquerda/direita. Agora mede tudo de uma vez, relativo a
+// propria pagina (nao depende da rolagem), e uma capa segura a tela parada enquanto gera.
 async function baixarPdf() {
   const b = document.getElementById('b-pdf'); b.disabled = true; b.textContent = 'gerando...'
+  const capa = document.createElement('div'); capa.id = 'capa-pdf'; capa.setAttribute('data-html2canvas-ignore', 'true')
+  capa.innerHTML = '<div>gerando o PDF...<br><small>espere aqui, sem mexer na tela</small></div>'
+  document.body.appendChild(capa)
   document.body.classList.add('gerando')
   try {
     const { jsPDF } = window.jspdf
     const pdf = new jsPDF({ unit: 'mm', format: 'a4', compress: true })
     const M = 10, LW = 210 - 2 * M, PH = 297 - 2 * M
     const pag = document.getElementById('pag'), cs = getComputedStyle(pag)
-    const k = LW / (pag.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) // mm por px de CSS
-    const x0 = pag.getBoundingClientRect().left + parseFloat(cs.paddingLeft)
+    const pl = parseFloat(cs.paddingLeft), larg = pag.clientWidth - pl - parseFloat(cs.paddingRight)
+    const k = LW / larg // mm por px de CSS
+    const pr = pag.getBoundingClientRect()
+    const blocos = [...pag.querySelectorAll('.blk')].map((el) => { const bx = el.getBoundingClientRect(); return { el, dx: Math.min(Math.max(0, bx.left - pr.left - pl), larg), hc: bx.height } }) // tudo no mesmo instante
+    const titulo = (el) => el.classList.contains('cab') || (el.children.length === 1 && el.firstElementChild.tagName === 'H2')
     let y = M
-    for (const el of pag.querySelectorAll('.blk')) {
+    for (const [i, { el, dx, hc }] of blocos.entries()) {
+      const prox = blocos[i + 1]
+      if (prox && titulo(el) && y > M) { const junto = (hc + prox.hc) * k; if (junto <= PH && y + junto > M + PH) { pdf.addPage(); y = M } } // titulo vai junto com a 1a linha
       const cv = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: 900 })
-      const bx = el.getBoundingClientRect(), w = (cv.width / 3) * k, h = (cv.height / 3) * k, x = M + (bx.left - x0) * k // tamanho do canvas (layout de 900px), não da tela
+      const w0 = (cv.width / 3) * k, w = Math.min(w0, LW), h = (cv.height / 3) * k * (w / w0), x = M + dx * k // tamanho do canvas (layout de 900px), não da tela
       const st = getComputedStyle(el), mt = parseFloat(st.marginTop) * k, mb = parseFloat(st.marginBottom) * k
       if (y > M) y += mt
       if (h <= PH) {
@@ -102,7 +117,7 @@ async function baixarPdf() {
     }
     pdf.save(NOME_PDF)
   } catch (e) { alert('não gerou o PDF: ' + e.message) }
-  document.body.classList.remove('gerando')
+  document.body.classList.remove('gerando'); capa.remove()
   b.disabled = false; b.textContent = 'Baixar PDF'
 }
 ;(async () => {

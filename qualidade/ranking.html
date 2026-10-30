@@ -38,7 +38,15 @@ td.pos{font-size:17px;font-weight:800;color:#0f766e;width:34px}
 .acoes{position:fixed;top:10px;right:10px;display:flex;gap:6px}.acoes button{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid #0f766e;background:#0f766e;color:#fff;cursor:pointer}
 @media print{.acoes{display:none}.pag{padding:0;max-width:none}}
 @media(max-width:640px){.acoes{position:static;justify-content:flex-end;padding:8px}.kpis{grid-template-columns:1fr 1fr}}
+/* 30/10 (modelo da Maria): ranking = 1 folha A4 PAISAGEM desenhada num canvas (sai igual no iPhone e no PC) */
+body.rank{background:#e9ebf2}
+body.rank .pag{max-width:1200px;padding:56px 14px 18px}
+@media(max-width:640px){body.rank .pag{padding-top:4px}}
+#folha{display:block;width:100%;height:auto;border-radius:8px;box-shadow:0 2px 14px rgba(15,23,42,.14);background:#f3f4f9}
+@media print{body.rank{background:#fff}body.rank .pag{padding:0;max-width:none}#folha{width:auto;height:196mm;max-width:100%;margin:0 auto;border-radius:0;box-shadow:none}}
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
@@ -63,6 +71,17 @@ let NOME_PDF = 'ranking.pdf'
 // 1 página: a página inteira vira UMA imagem e cabe numa folha A4 (reduz se precisar)
 async function baixarPdf() {
   const b = document.getElementById('b-pdf'); b.disabled = true; b.textContent = 'gerando...'
+  if (TIPO === 'ranking') { // folha paisagem: o canvas já está pronto, entra inteiro na página
+    try {
+      const { jsPDF } = window.jspdf
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true })
+      const cv = document.getElementById('folha')
+      pdf.addImage(cv.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 297, (297 * cv.height) / cv.width, undefined, 'FAST')
+      pdf.save(NOME_PDF)
+    } catch (e) { alert('não gerou o PDF: ' + e.message) }
+    b.disabled = false; b.textContent = 'Baixar PDF'
+    return
+  }
   document.body.classList.add('gerando')
   try {
     const { jsPDF } = window.jspdf
@@ -76,6 +95,133 @@ async function baixarPdf() {
   } catch (e) { alert('não gerou o PDF: ' + e.message) }
   document.body.classList.remove('gerando')
   b.disabled = false; b.textContent = 'Baixar PDF'
+}
+
+// ================= 30/10 RANKING NO MODELO DA MARIA (1 folha A4 paisagem, escala 0-100) =================
+const FW = 1600, FH = 1131, ESC = 2 // proporção da A4 deitada; desenhado em dobro pra ficar nítido
+const FC = '"Barlow Condensed", "Arial Narrow", Arial, sans-serif', FB = 'Barlow, Arial, sans-serif'
+const MINIMA = 85, RT = 'Kátia Cavalcante', CRN = '27.760'
+const NOME_LONGO = { cd: 'Centro de Distribuição', scs: 'São Caetano', sp2: 'Botequim Washington Luís', sbc: 'Botequim São Bernardo', jardim: 'Botequim Esmeralda' }
+const nomeLongo = (l) => NOME_LONGO[l.id] || (l.tipo === 'cd' ? l.apelido || l.nome : 'Botequim ' + (l.apelido || l.nome))
+const nomeCartao = (l) => (l.id === 'cd' ? 'Centro de Distribuição (CD)' : nomeLongo(l))
+function semanaIso(iso) { // nº da semana ISO (segunda a domingo) e o ano dela
+  const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7) + 3)
+  const j = new Date(Date.UTC(d.getUTCFullYear(), 0, 4))
+  return { n: 1 + Math.round(((d - j) / 864e5 - 3 + ((j.getUTCDay() + 6) % 7)) / 7), ano: d.getUTCFullYear() }
+}
+async function esperaFontes() {
+  if (!document.fonts || !document.fonts.load) return
+  const f = ['800 60px "Barlow Condensed"', '700 40px "Barlow Condensed"', '600 30px "Barlow Condensed"', '500 30px "Barlow Condensed"', '500 26px Barlow', '600 26px Barlow']
+  await Promise.race([Promise.all(f.map((x) => document.fonts.load(x, 'Á1º–').catch(() => 0))), new Promise((ok) => setTimeout(ok, 5000))])
+}
+function caixa(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath() }
+function fonte(g, peso, tam, fam, txt, max) { let t = tam; g.font = `${peso} ${t}px ${fam}`; while (max && g.measureText(txt).width > max && t > 12) { t -= 1; g.font = `${peso} ${t}px ${fam}` } return t }
+function estrela(g, cx, cy, R, r) { g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, q = i % 2 ? r : R; g.lineTo(cx + q * Math.cos(a), cy + q * Math.sin(a)) } g.closePath(); g.fill() }
+function exclama(g, cx, cy, s) { g.fillStyle = '#fff'; caixa(g, cx - 7 * s, cy - 33 * s, 14 * s, 44 * s, 7 * s); g.fill(); g.beginPath(); g.arc(cx, cy + 24 * s, 8 * s, 0, 2 * Math.PI); g.fill() }
+function iconeEvolucao(g, cx, cy) {
+  g.fillStyle = '#fff'
+  ;[[-30, 16], [-12, 28], [6, 40]].forEach(([dx, h]) => { caixa(g, cx + dx, cy + 28 - h, 14, h, 2); g.fill() })
+  g.strokeStyle = '#fff'; g.lineWidth = 6; g.lineCap = 'round'
+  g.beginPath(); g.moveTo(cx - 30, cy - 4); g.lineTo(cx - 8, cy - 16); g.lineTo(cx + 2, cy - 8); g.lineTo(cx + 22, cy - 26); g.stroke()
+  g.beginPath(); g.moveTo(cx + 30, cy - 34); g.lineTo(cx + 9, cy - 31); g.lineTo(cx + 27, cy - 13); g.closePath(); g.fill()
+}
+function medalha(g, cx, cy, pos, s) {
+  const c = { 1: ['#fff1a8', '#f4bd16', '#a77400', '#6b4a00'], 2: ['#ffffff', '#c3c9d2', '#7d8794', '#3f4752'], 3: ['#ffd2ab', '#e0823f', '#9a521f', '#5c2e0d'] }[pos] || ['#e4dbff', '#9d84f0', '#5f45b8', '#2f1f70']
+  g.fillStyle = '#d0263a' // fitas
+  for (const k of [-1, 1]) { g.beginPath(); g.moveTo(cx + k * 4 * s, cy + 14 * s); g.lineTo(cx + k * 25 * s, cy + 14 * s); g.lineTo(cx + k * 28 * s, cy + 46 * s); g.lineTo(cx + k * 19 * s, cy + 39 * s); g.lineTo(cx + k * 9 * s, cy + 47 * s); g.closePath(); g.fill() }
+  const gr = g.createRadialGradient(cx - 9 * s, cy - 11 * s, 3 * s, cx, cy, 31 * s); gr.addColorStop(0, c[0]); gr.addColorStop(1, c[1])
+  g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, 31 * s, 0, 2 * Math.PI); g.fill()
+  g.lineWidth = 3 * s; g.strokeStyle = c[2]; g.stroke()
+  g.beginPath(); g.arc(cx, cy, 24 * s, 0, 2 * Math.PI); g.lineWidth = 1.6 * s; g.strokeStyle = 'rgba(255,255,255,.75)'; g.stroke()
+  g.fillStyle = c[3]; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 ${Math.round(30 * s)}px ${FC}`; g.fillText(pos + 'º', cx + 1, cy + 1 * s)
+}
+function alerta(g, cx, cy, s) { g.fillStyle = '#f97316'; g.beginPath(); g.arc(cx, cy, 32 * s, 0, 2 * Math.PI); g.fill(); exclama(g, cx, cy, 0.78 * s) }
+
+function desenharRanking(d) {
+  const cv = document.createElement('canvas'); cv.id = 'folha'; cv.width = FW * ESC; cv.height = FH * ESC
+  const g = cv.getContext('2d'); g.scale(ESC, ESC)
+  const linhas = [...d.linhas].sort((a, b) => (a.pos || 99) - (b.pos || 99) || ((b.geral.nota ?? -1) - (a.geral.nota ?? -1)))
+  const com = linhas.filter((l) => l.geral.nota != null), sem = linhas.filter((l) => l.geral.nota == null)
+  const melhor = com[0], ultima = com.length > 1 ? com[com.length - 1] : null
+  const subiu = com.filter((l) => l.geral.delta != null && l.geral.delta > 0).sort((a, b) => b.geral.delta - a.geral.delta)[0]
+  const S = semanaIso(d.semana.de)
+  // fundo
+  g.fillStyle = '#f3f4f9'; g.fillRect(0, 0, FW, FH)
+  // faixa azul do título
+  const X = 24, LW = FW - 2 * X
+  g.fillStyle = '#0b2559'; caixa(g, X, 22, LW, 118, 18); g.fill()
+  const dir = `Semana ${S.n}.  Escala: 0-100`
+  g.textBaseline = 'middle'; g.fillStyle = '#fff'
+  fonte(g, 500, 38, FC, dir); const wd = g.measureText(dir).width; g.textAlign = 'right'; g.fillText(dir, X + LW - 32, 82)
+  const xdiv = X + LW - 32 - wd - 34
+  g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(xdiv, 46); g.lineTo(xdiv, 118); g.stroke()
+  const tit = 'RANKING SEMANAL – AUDITORIA DE QUALIDADE'
+  fonte(g, 800, 70, FC, tit, xdiv - 34 - (X + 34)); g.textAlign = 'left'; g.fillText(tit, X + 34, 84)
+  // 3 cartões
+  const cw = (LW - 2 * 22) / 3, cy0 = 162, ch = 168
+  const cartoes = [
+    { t: 'Melhor Unidade', cor: '#16a34a', fundo: '#e9f8ef', borda: '#c8ecd5', ic: (x, y) => { g.fillStyle = '#fff'; estrela(g, x, y, 34, 14) }, nome: melhor ? nomeCartao(melhor) : '—', v: melhor ? 'Nota: ' + f2(melhor.geral.nota) : 'sem visita na semana' },
+    { t: 'Maior Evolução', cor: '#1d6fe0', fundo: '#e7f1fd', borda: '#c6ddf8', ic: (x, y) => iconeEvolucao(g, x, y), nome: subiu ? nomeCartao(subiu) : 'nenhuma unidade subiu', v: subiu ? '+ ' + f2(subiu.geral.delta) : 'em relação à semana anterior' },
+    { t: ultima ? `Unidade em ${ultima.pos || com.length}º Lugar` : 'Último lugar', cor: '#f26b0f', fundo: '#fff2e7', borda: '#fbd6b6', ic: (x, y) => exclama(g, x, y, 1), nome: ultima ? nomeCartao(ultima) : '—', v: ultima ? 'Nota: ' + f2(ultima.geral.nota) : '' }
+  ]
+  cartoes.forEach((c, i) => {
+    const x = X + i * (cw + 22)
+    g.fillStyle = c.fundo; caixa(g, x, cy0, cw, ch, 16); g.fill(); g.strokeStyle = c.borda; g.lineWidth = 2; g.stroke()
+    const ix = x + 24 + 56, iy = cy0 + ch / 2
+    g.fillStyle = c.cor; g.beginPath(); g.arc(ix, iy, 56, 0, 2 * Math.PI); g.fill(); c.ic(ix, iy)
+    const tx = x + 156, mx = cw - 156 - 16
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic'
+    g.fillStyle = c.cor; fonte(g, 700, 44, FC, c.t, mx); g.fillText(c.t, tx, cy0 + 58)
+    g.fillStyle = '#111827'; fonte(g, 700, 36, FC, c.nome, mx); g.fillText(c.nome, tx, cy0 + 104)
+    fonte(g, 500, 36, FC, c.v, mx); g.fillText(c.v, tx, cy0 + 146)
+  })
+  // painel do gráfico
+  const py = 352, ph = 640
+  g.fillStyle = '#fff'; caixa(g, X, py, LW, ph, 18); g.fill(); g.strokeStyle = '#e4e7ef'; g.lineWidth = 1.5; g.stroke()
+  const PL = 540, PR = 1420, y0 = py + 56, y1 = py + ph - 74, xv = (v) => PL + (Math.max(0, Math.min(100, v)) / 100) * (PR - PL)
+  g.lineWidth = 1.5
+  for (let v = 0; v <= 100; v += 20) { g.strokeStyle = v ? '#e3e6ee' : '#8f98a8'; g.beginPath(); g.moveTo(xv(v), y0 - 14); g.lineTo(xv(v), y1); g.stroke() }
+  g.strokeStyle = '#8f98a8'; g.beginPath(); g.moveTo(PL, y1); g.lineTo(PR + 40, y1); g.stroke()
+  g.fillStyle = '#1e293b'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.font = `500 32px ${FB}`
+  for (let v = 0; v <= 100; v += 20) g.fillText(String(v), xv(v), y1 + 42)
+  const valores = []
+  const todas = [...com, ...sem], n = Math.max(todas.length, 1), rowH = (y1 - y0) / n, barH = Math.min(72, rowH * 0.64), s = Math.min(1, rowH / 96)
+  todas.forEach((l, i) => {
+    const cy = y0 + rowH * (i + 0.5), nota = l.geral.nota, eUlt = ultima && l === ultima
+    if (nota == null) { g.fillStyle = '#cbd2dc'; g.beginPath(); g.arc(84, cy, 26 * s, 0, 2 * Math.PI); g.fill() }
+    else if (eUlt) alerta(g, 84, cy, s)
+    else medalha(g, 84, cy - 6 * s, l.pos || i + 1, s)
+    g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillStyle = nota == null ? '#94a3b8' : '#111827'
+    fonte(g, 700, Math.round(40 * Math.max(s, 0.75)), FC, nomeLongo(l), PL - 24 - 140); g.fillText(nomeLongo(l), 140, cy)
+    if (nota == null) { g.fillStyle = '#94a3b8'; g.font = `500 28px ${FB}`; g.fillText('sem visita nesta semana', PL + 18, cy); return }
+    const xe = xv(nota), gr = g.createLinearGradient(0, cy - barH / 2, 0, cy + barH / 2)
+    if (eUlt) { gr.addColorStop(0, '#ffa64d'); gr.addColorStop(1, '#f98b2c') } else { gr.addColorStop(0, '#2bcf73'); gr.addColorStop(1, '#1db45e') }
+    g.fillStyle = gr; caixa(g, PL, cy - barH / 2, Math.max(xe - PL, 8), barH, 6); g.fill()
+    valores.push([f2(nota), xe + 12, cy + 2, eUlt ? '#ea580c' : '#15803d', Math.round(44 * Math.max(s, 0.8))])
+  })
+  // linha da nota mínima
+  const xm = xv(MINIMA)
+  g.strokeStyle = '#e11d2a'; g.lineWidth = 3.5; g.setLineDash([13, 9]); g.beginPath(); g.moveTo(xm, py + 22); g.lineTo(xm, y1); g.stroke(); g.setLineDash([])
+  g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineJoin = 'round'
+  for (const [t, x, y, c, tam] of valores) { g.font = `700 ${tam}px ${FC}`; g.strokeStyle = '#fff'; g.lineWidth = 9; g.strokeText(t, x, y); g.fillStyle = c; g.fillText(t, x, y) }
+  const lm = `Nota mínima aceitável da rede: ${MINIMA}`
+  g.fillStyle = '#e11d2a'; g.textBaseline = 'middle'; fonte(g, 500, 24, FC, lm); const wl = g.measureText(lm).width
+  if (xm + 12 + wl <= X + LW - 14) { g.textAlign = 'left'; g.fillText(lm, xm + 12, py + 32) } else { g.textAlign = 'right'; g.fillText(lm, xm - 12, py + 32) }
+  if (d.tem_demo) { g.fillStyle = '#6d28d9'; g.textAlign = 'left'; g.font = `600 22px ${FB}`; g.fillText('esta semana tem relatórios de teste (DEMO): eles não entram na nota', X + 24, py + 32) }
+  // rodapé
+  g.fillStyle = '#e6e8f4'; caixa(g, X, 1016, LW, 84, 18); g.fill()
+  const rod = `Auditoria de Qualidade, Semana ${S.n}. Ano ${S.ano}, Responsável Técnica: ${RT}, CRN: ${CRN}`
+  g.fillStyle = '#334155'; g.textAlign = 'center'; g.textBaseline = 'middle'; fonte(g, 500, 30, FB, rod, LW - 60); g.fillText(rod, FW / 2, 1058)
+  return cv
+}
+async function montarRanking(d) {
+  document.body.classList.add('rank')
+  const S = semanaIso(d.semana.de)
+  document.title = `Ranking semanal — Auditoria de Qualidade — Semana ${S.n} (${brc(d.semana.de)} a ${br(d.semana.ate)})`
+  NOME_PDF = `Ranking semanal - Auditoria de Qualidade - Semana ${S.n} - ${d.semana.de.split('-').reverse().join('-')} a ${d.semana.ate.split('-').reverse().join('-')}.pdf`.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w .()-]/g, '')
+  document.head.insertAdjacentHTML('beforeend', '<style>@page{size:A4 landscape;margin:6mm}</style>')
+  await esperaFontes()
+  const pag = document.getElementById('pag'); pag.innerHTML = ''; pag.appendChild(desenharRanking(d))
 }
 
 function semRepetir(arr) { const v = new Set(); return arr.filter((t) => { const k = String(t).trim().toLowerCase(); if (v.has(k)) return false; v.add(k); return true }) }
@@ -145,7 +291,7 @@ function montar(d) {
     }
   } catch (e) { document.getElementById('pag').textContent = 'sem internet — tente de novo'; return }
   if (!d || d.erro || !d.linhas) { document.getElementById('pag').textContent = (d && d.erro) || 'não consegui ler o ranking'; return }
-  montar(d)
+  if (TIPO === 'ranking') await montarRanking(d); else montar(d)
   document.body.dataset.pronto = '1'
   document.getElementById('b-pdf').disabled = false
   if (P.get('baixar') === '1') baixarPdf()
