@@ -305,6 +305,9 @@ const RANK_PDF = 'ranking.html'
 function pdfSemana(tipo, sem) { window.open(`${RANK_PDF}?tipo=${tipo}&semana=${sem}&baixar=1`) }
 async function telaComparativo(sem) {
   if (sem) SEMANA = sem
+  // 10/11 (Maria: "o ranking tem que ser o comparativo dos relatórios da semana"): abre na ÚLTIMA SEMANA FECHADA (seg→dom
+  // passado). A semana em andamento só tem 1–2 relatórios e confundia o ranking. ▶ continua indo pra semana atual.
+  if (!SEMANA) { const h = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })); h.setDate(h.getDate() - ((h.getDay() + 6) % 7) - 7); SEMANA = h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0') }
   const d = await api('/api/qualidade/comparativo' + (SEMANA ? '?semana=' + SEMANA : ''))
   const ant = (n) => { const x = new Date(d.semana.de + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n * 7); return x.toISOString().slice(0, 10) }
   const dl = (v) => v == null ? '<span class="sub">—</span>' : `<span class="delta ${v >= 0 ? 'cor-v' : 'cor-r'}">${v >= 0 ? '▲' : '▼'} ${f2(Math.abs(v))}</span>`

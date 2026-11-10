@@ -107,7 +107,7 @@ const nomeCartao = (l) => (l.id === 'cd' ? 'Centro de Distribuição (CD)' : nom
 function semanaIso(iso) { // nº da semana ISO (segunda a domingo) e o ano dela
   const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7) + 3)
   const j = new Date(Date.UTC(d.getUTCFullYear(), 0, 4))
-  return { n: 1 + Math.round(((d - j) / 864e5 - 3 + ((j.getUTCDay() + 6) % 7)) / 7), ano: d.getUTCFullYear() }
+  return { n: 2 + Math.round(((d - j) / 864e5 - 3 + ((j.getUTCDay() + 6) % 7)) / 7), ano: d.getUTCFullYear() } // 10/11: + 1 = numeração da Kátia (S43 = 12 a 18/10/2026)
 }
 async function esperaFontes() {
   if (!document.fonts || !document.fonts.load) return
